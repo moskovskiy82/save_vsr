@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     UnitOfTemperature,
+    UnitOfPower,
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
@@ -28,19 +29,21 @@ from .const import (
 )
 from .coordinator import VSRCoordinator
 
+
 # --- Entity Descriptions ------------------------------------------------------
 
 @dataclass(frozen=True, kw_only=True)
 class VSRSensorDescription(SensorEntityDescription):
     coordinator_key: str
 
+
 SENSORS: tuple[VSRSensorDescription, ...] = (
-    # Modes / Speed (diagnostic informative)
+    # Mode / Speed
     VSRSensorDescription(
         key="mode_speed",
         name="Mode Speed",
         device_class=SensorDeviceClass.ENUM,
-        options=["low", "medium", "high"],  # will map in value method
+        options=["low", "medium", "high"],
         coordinator_key="mode_speed",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -91,10 +94,9 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         coordinator_key="temp_overheat",
-        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 
-    # Fans / % / misc
+    # Fans / RPM / Percentages
     VSRSensorDescription(
         key="saf_rpm",
         name="Supply Fan RPM",
@@ -130,6 +132,42 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="heater_percentage",
     ),
+
+    # Power Sensors (Energy Dashboard Compatible)
+    VSRSensorDescription(
+        key="supply_fan_power",
+        name="Supply Fan Power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        coordinator_key="fan_supply",
+    ),
+    VSRSensorDescription(
+        key="extract_fan_power",
+        name="Extract Fan Power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        coordinator_key="fan_extract",
+    ),
+    VSRSensorDescription(
+        key="heater_power",
+        name="Heater Power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        coordinator_key="heater_percentage",
+    ),
+    VSRSensorDescription(
+        key="total_power",
+        name="Total Power Consumption",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        coordinator_key="total_power",
+    ),
+
+    # ECO Offset
     VSRSensorDescription(
         key="setpoint_eco_offset",
         name="ECO Offset",
@@ -140,12 +178,11 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 
-    # Countdown raw (diagnostics)
+    # Countdown Raw (Diagnostics)
     VSRSensorDescription(
         key="countdown_time_s",
         name="Countdown Remaining (s)",
         coordinator_key="countdown_time_s",
-        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     VSRSensorDescription(
         key="countdown_time_s_factor",
@@ -155,11 +192,13 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
 )
 
-# --- Alarm Enum sensors (Diagnostics) -----------------------------------------
+
+# --- Alarm Enum Sensors (Diagnostics) ----------------------------------------
 
 @dataclass(frozen=True, kw_only=True)
 class VSRAlarmDescription(SensorEntityDescription):
     coordinator_key: str
+
 
 ALARM_SENSORS: tuple[VSRAlarmDescription, ...] = tuple(
     VSRAlarmDescription(
@@ -202,12 +241,14 @@ ALARM_SENSORS: tuple[VSRAlarmDescription, ...] = tuple(
     ]
 )
 
-# --- Countdown (pretty) sensors ----------------------------------------------
+
+# --- Countdown (Pretty) Sensors ---------------------------------------------
 
 @dataclass(frozen=True, kw_only=True)
 class VSRCountdownDescription(SensorEntityDescription):
     coordinator_key: str
-    target_mode: int  # main status value that indicates the mode is active
+    target_mode: int
+
 
 COUNTDOWN_SENSORS: tuple[VSRCountdownDescription, ...] = (
     VSRCountdownDescription(key="away_countdown", name="Away Time Remaining", coordinator_key="mode_main", target_mode=5, entity_category=EntityCategory.DIAGNOSTIC),
@@ -217,8 +258,8 @@ COUNTDOWN_SENSORS: tuple[VSRCountdownDescription, ...] = (
     VSRCountdownDescription(key="holiday_countdown", name="Holiday Time Remaining", coordinator_key="mode_main", target_mode=6, entity_category=EntityCategory.DIAGNOSTIC),
 )
 
-# -----------------------------------------------------------------------------
 
+# --- Setup Entry -------------------------------------------------------------
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
@@ -238,6 +279,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     async_add_entities(entities)
 
+
+# --- Base Sensor Classes -----------------------------------------------------
 
 class VSRBaseSensor(CoordinatorEntity[VSRCoordinator], SensorEntity):
     _attr_has_entity_name = True
@@ -259,6 +302,19 @@ class VSRSensor(VSRBaseSensor):
         if self.entity_description.key == "mode_speed":
             raw = self.coordinator.data.get("mode_speed")
             return {2: "low", 3: "medium", 4: "high"}.get(raw, "low")
+
+        # Power sensors calculations
+        if self.entity_description.key == "supply_fan_power":
+            return round((self.coordinator.data.get("fan_supply", 0) / 100) * 160, 1)
+        if self.entity_description.key == "extract_fan_power":
+            return round((self.coordinator.data.get("fan_extract", 0) / 100) * 160, 1)
+        if self.entity_description.key == "heater_power":
+            return round((self.coordinator.data.get("heater_percentage", 0) / 100) * 1650, 1)
+        if self.entity_description.key == "total_power":
+            supply = (self.coordinator.data.get("fan_supply", 0) / 100) * 160
+            extract = (self.coordinator.data.get("fan_extract", 0) / 100) * 160
+            heater = (self.coordinator.data.get("heater_percentage", 0) / 100) * 1650
+            return round(supply + extract + heater, 1)
 
         return value
 
