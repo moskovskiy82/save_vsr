@@ -62,6 +62,12 @@ REG_FIREPLACE_MINS     = 1102    # holding, minutes
 REG_REFRESH_MINS       = 1103    # holding, minutes
 REG_CROWDED_HOURS      = 1104    # holding, hours
 
+# Switches
+
+REG_ECO_MODE_ENABLE: int | None = 2504     # holding register, 0/1
+REG_HEATER_ENABLE: int | None = 3001       # holding register, 0/1
+REG_RH_TRANSFER_ENABLE: int | None = 2203  # holding register, 0/1
+
 # Alarms (enum 0..3 where applicable)
 REG_ALARM_SAF          = 15001
 REG_ALARM_EAF          = 15008

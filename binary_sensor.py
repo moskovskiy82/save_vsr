@@ -19,10 +19,10 @@ class VSRBinaryDescription(BinarySensorEntityDescription):
 
 BINARY_SENSORS: tuple[VSRBinaryDescription, ...] = (
     VSRBinaryDescription(key="damper_state", name="Damper Open", device_class=BinarySensorDeviceClass.OPENING, coordinator_key="damper_state"),
-    VSRBinaryDescription(key="cooldown", name="Cooldown", device_class=BinarySensorDeviceClass.COLD, coordinator_key="cooldown", entity_category=EntityCategory.DIAGNOSTIC),
-    VSRBinaryDescription(key="mode_summerwinter", name="Summer/Winter Mode", device_class=BinarySensorDeviceClass.HEAT, coordinator_key="mode_summerwinter", entity_category=EntityCategory.DIAGNOSTIC),
-    VSRBinaryDescription(key="fan_running", name="Fan Running", device_class=BinarySensorDeviceClass.RUNNING, coordinator_key="fan_running"),
-    VSRBinaryDescription(key="cooling_recovery", name="Cooling Recovery", device_class=BinarySensorDeviceClass.COLD, coordinator_key="cooling_recovery", entity_category=EntityCategory.DIAGNOSTIC),
+    VSRBinaryDescription(key="cooldown", name="Cooldown", device_class=BinarySensorDeviceClass.COLD, coordinator_key="cooldown"),
+    VSRBinaryDescription(key="mode_summerwinter", name="Summer/Winter Mode", device_class=BinarySensorDeviceClass.HEAT, coordinator_key="mode_summerwinter"),
+    VSRBinaryDescription(key="fan_running", name="Fan Running", device_class=BinarySensorDeviceClass.RUNNING, coordinator_key="fan_running", entity_category=EntityCategory.DIAGNOSTIC),
+    VSRBinaryDescription(key="cooling_recovery", name="Cooling Recovery", device_class=BinarySensorDeviceClass.COLD, coordinator_key="cooling_recovery"),
 )
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:

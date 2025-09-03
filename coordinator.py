@@ -38,6 +38,9 @@ from .const import (
     REG_FIREPLACE_MINS,
     REG_REFRESH_MINS,
     REG_CROWDED_HOURS,
+    REG_ECO_MODE_ENABLE,
+    REG_HEATER_ENABLE,
+    REG_RH_TRANSFER_ENABLE,
     REG_ALARM_SAF,
     REG_ALARM_EAF,
     REG_ALARM_FROST_PROT,
@@ -71,7 +74,10 @@ from .hub import VSRHub
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Coordinator for Systemair SAVE VSR Modbus integration."""
+
     def __init__(self, hass: HomeAssistant, hub: VSRHub, update_interval_s: int) -> None:
         super().__init__(
             hass,
@@ -82,10 +88,10 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.hub = hub
 
     async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch data from the Systemair SAVE VSR Modbus registers."""
         data: dict[str, Any] = {}
         try:
-            # The reads are grouped to limit round-trips.
-            # 1) Modes / temperatures / % / RPMs / misc
+            # Batch reads where possible to reduce Modbus round-trips
             tasks = [
                 self.hub.read_input(REG_MODE_MAIN_STATUS_IN, 1),
                 self.hub.read_holding(REG_MODE_SPEED, 1),
@@ -95,7 +101,7 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.hub.read_holding(REG_TEMP_EXHAUST, 1),
                 self.hub.read_holding(REG_TEMP_EXTRACT, 1),
                 self.hub.read_holding(REG_TEMP_OVERHEAT, 1),
-                self.hub.read_holding(REG_SAF_RPM, 2),  # SAF/EAF
+                self.hub.read_holding(REG_SAF_RPM, 2),  # SAF/EAF RPMs
                 self.hub.read_holding(REG_SUPPLY_FAN_PCT, 2),
                 self.hub.read_holding(REG_HEATER_PERCENT, 1),
                 self.hub.read_holding(REG_HEAT_EXCH_STATE, 1),
@@ -106,12 +112,10 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.hub.read_holding(REG_FAN_RUNNING_START, 2),
                 self.hub.read_holding(REG_DAMPER_STATE, 1),
                 self.hub.read_holding(REG_COOLING_RECOVERY, 1),
-                # timers
                 self.hub.read_input(REG_USERMODE_REMAIN, 1),
                 self.hub.read_input(REG_USERMODE_FACTOR, 1),
-                # durations
                 self.hub.read_holding(REG_HOLIDAY_DAYS, 5),
-                # alarms (sampled individually; could be more batched if continuous)
+                # alarms individually
                 self.hub.read_holding(REG_ALARM_SAF, 1),
                 self.hub.read_holding(REG_ALARM_EAF, 1),
                 self.hub.read_holding(REG_ALARM_FROST_PROT, 1),
@@ -139,6 +143,7 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.hub.read_holding(REG_ALARM_FILTER_WARN, 1),
                 self.hub.read_holding(REG_ALARM_TYPE_A, 3),
             ]
+
             (
                 mode_main_in,
                 mode_speed,
@@ -148,11 +153,11 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 heater_pct, exch_state, rotor, heater,
                 eco_offs, summerwinter, fanrun_cool, damper, cool_recovery,
                 cdown_s, cdown_factor,
-                durations,  # 5 regs
+                durations,
                 *alarms,
             ) = await asyncio.gather(*tasks)
 
-            # decode basic
+            # --- Decode numeric values ---
             data["mode_main"] = mode_main_in[0] if mode_main_in else None
             data["mode_speed"] = mode_speed[0] if mode_speed else None
             data["target_temp"] = round((target_temp[0] if target_temp else 0) * 0.1, 1)
@@ -191,7 +196,21 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 data["refresh_mins"]   = durations[3]
                 data["crowded_hours"]  = durations[4]
 
-            # alarms decoding as ints (0..3 where applicable)
+            # --- Read switch states if registers exist ---
+            try:
+                if REG_ECO_MODE_ENABLE:
+                    eco_mode = await self.hub.read_holding(REG_ECO_MODE_ENABLE, 1)
+                    data["eco_mode"] = bool(eco_mode and eco_mode[0] > 0)
+                if REG_HEATER_ENABLE:
+                    heater_enable = await self.hub.read_holding(REG_HEATER_ENABLE, 1)
+                    data["heater_enable"] = bool(heater_enable and heater_enable[0] > 0)
+                if REG_RH_TRANSFER_ENABLE:
+                    rh_transfer = await self.hub.read_holding(REG_RH_TRANSFER_ENABLE, 1)
+                    data["rh_transfer"] = bool(rh_transfer and rh_transfer[0] > 0)
+            except Exception as err:
+                _LOGGER.debug("Switch read failed: %s", err)
+
+            # --- Decode alarms ---
             alarm_keys = [
                 "alarm_saf","alarm_eaf","alarm_frost_protect","alarm_saf_rpm",
                 "alarm_eaf_rpm","alarm_fpt","alarm_oat","alarm_sat","alarm_rat",
@@ -200,8 +219,8 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "alarm_pdm_rhs","alarm_pdm_eat","alarm_man_fan_stop","alarm_overheat_temp",
                 "alarm_fire","alarm_filter_warn",
             ]
-            for key, reg in zip(alarm_keys, alarms[:-1]):  # last alarms[-1] are type A/B/C tuple
-                data[key] = (reg[0] if reg else 0)
+            for key, reg in zip(alarm_keys, alarms[:-1]):
+                data[key] = reg[0] if reg else 0
 
             type_abc = alarms[-1] if alarms else None
             data["alarm_typeA"] = type_abc[0] if type_abc else 0

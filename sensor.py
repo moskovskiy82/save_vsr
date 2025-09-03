@@ -57,7 +57,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     # Temperatures
     VSRSensorDescription(
         key="temp_outdoor",
-        name="Outdoor Temperature",
+        name="Temperature Outdoor",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -65,7 +65,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
     VSRSensorDescription(
         key="temp_supply",
-        name="Supply Temperature",
+        name="Temperature Supply",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -73,7 +73,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
     VSRSensorDescription(
         key="temp_extract",
-        name="Extract Temperature",
+        name="Temperature Extract",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -81,7 +81,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
     VSRSensorDescription(
         key="temp_exhaust",
-        name="Exhaust Temperature",
+        name="Temperature Exhaust",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -89,7 +89,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
     VSRSensorDescription(
         key="temp_overheat",
-        name="Overheat Temperature",
+        name="Temperature Overheat",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -99,28 +99,28 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     # Fans / RPM / Percentages
     VSRSensorDescription(
         key="saf_rpm",
-        name="Supply Fan RPM",
+        name="Fan Supply RPM",
         native_unit_of_measurement=REVOLUTIONS_PER_MINUTE,
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="saf_rpm",
     ),
     VSRSensorDescription(
         key="eaf_rpm",
-        name="Extract Fan RPM",
+        name="Fan Extract RPM",
         native_unit_of_measurement=REVOLUTIONS_PER_MINUTE,
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="eaf_rpm",
     ),
     VSRSensorDescription(
         key="fan_supply",
-        name="Supply Fan %",
+        name="Fan Supply %",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="fan_supply",
     ),
     VSRSensorDescription(
         key="fan_extract",
-        name="Extract Fan %",
+        name="Fan Extract %",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="fan_extract",
@@ -136,7 +136,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     # Power Sensors (Energy Dashboard Compatible)
     VSRSensorDescription(
         key="supply_fan_power",
-        name="Supply Fan Power",
+        name="Fan Supply Power",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -144,7 +144,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
     VSRSensorDescription(
         key="extract_fan_power",
-        name="Extract Fan Power",
+        name="Fan Extract Power",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -160,7 +160,7 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
     VSRSensorDescription(
         key="total_power",
-        name="Total Power Consumption",
+        name="VSR Power Consumption",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
