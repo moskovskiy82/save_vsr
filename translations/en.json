@@ -1,0 +1,34 @@
+{
+  "title": "Systemair VSR",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Systemair VSR (Serial)",
+        "description": "Enter Modbus serial parameters for your SAVE VSR unit.",
+        "data": {
+          "connection_type": "Connection type",
+          "serial_port": "Serial port (e.g., /dev/ttyUSB0)",
+          "baudrate": "Baud rate",
+          "stopbits": "Stop bits",
+          "bytesize": "Byte size",
+          "parity": "Parity",
+          "slave_id": "Slave ID",
+          "update_interval": "Update interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "serial_port_required": "Serial port is required."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Systemair VSR Options",
+        "data": {
+          "update_interval": "Update interval (seconds)"
+        }
+      }
+    }
+  }
+}

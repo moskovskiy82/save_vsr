@@ -1,0 +1,47 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Home Assistant storage & configs
+.storage/
+*.db
+*.db-journal
+*.log
+*.yaml
+*.yml
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# HACS cache
+custom_components/.hacs
+
+# Test files & coverage reports
+tests/
+.coverage
+pytest_cache/
+
+# Build artifacts
+dist/
+build/
+
+# Personal data backups
+backup/
+secrets.yaml
+
+# System files
+*.swp
+*.bak
+*.tmp
+

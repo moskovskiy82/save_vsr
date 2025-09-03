@@ -1,0 +1,17 @@
+{
+  "name": "Systemair VSR",
+  "content_in_root": false,
+  "homeassistant": "2025.1.0",
+  "render_readme": true,
+  "country": [
+    "GLOBAL"
+  ],
+  "domains": ["climate", "sensor", "binary_sensor", "number", "select"],
+  "iot_class": "local_polling",
+  "integration_type": "hub",
+  "codeowners": [
+    "@moskovskiy82"
+  ],
+  "documentation": "https://github.com/moskovskiy82/save_vsr",
+  "issue_tracker": "https://github.com/moskovskiy82/save_vsr/issues"
+}
