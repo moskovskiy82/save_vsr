@@ -1,1 +1,1 @@
-# save_vsr - version 2 of integration
+Custom integration for save vsr units
