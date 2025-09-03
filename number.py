@@ -53,6 +53,7 @@ NUMBERS: tuple[VSRNumberDescription, ...] = (
         step=0.5,
         value_to_reg=tenth_to_reg,
         reg_to_value=reg_to_tenth,
+        entity_category=EntityCategory.CONFIG,
     ),
     # Holiday duration (days)
     VSRNumberDescription(
