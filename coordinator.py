@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import timedelta
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -34,13 +33,6 @@ from .const import (
     REG_USERMODE_REMAIN,
     REG_USERMODE_FACTOR,
     REG_HOLIDAY_DAYS,
-    REG_AWAY_HOURS,
-    REG_FIREPLACE_MINS,
-    REG_REFRESH_MINS,
-    REG_CROWDED_HOURS,
-    REG_ECO_MODE_ENABLE,
-    REG_HEATER_ENABLE,
-    REG_RH_TRANSFER_ENABLE,
     REG_ALARM_SAF,
     REG_ALARM_EAF,
     REG_ALARM_FROST_PROT,
@@ -74,6 +66,11 @@ from .hub import VSRHub
 
 _LOGGER = logging.getLogger(__name__)
 
+# When merging adjacent registers, allow up to this gap (in registers) between descriptors
+# to be merged into a single Modbus read. Tune this if you see either too many reads
+# or reads that become excessively large.
+MAX_GAP = 2
+
 
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator for Systemair SAVE VSR Modbus integration."""
@@ -87,75 +84,170 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.hub = hub
 
+    async def _batch_read_type(
+        self, entries: List[Tuple[int, int, int]], is_input: bool
+    ) -> Dict[int, Optional[List[int]]]:
+        """
+        entries: list of (orig_index, address, count)
+        is_input: whether to call read_input (True) or read_holding (False)
+        returns: mapping orig_index -> registers list | None
+        """
+        if not entries:
+            return {}
+
+        # sort entries by address
+        entries_sorted = sorted(entries, key=lambda x: x[1])
+        blocks: List[dict] = []
+        cur_block = None
+
+        for idx, addr, cnt in entries_sorted:
+            if cur_block is None:
+                cur_block = {"start": addr, "end": addr + cnt - 1, "items": [(idx, addr, cnt)]}
+                continue
+            # merge if close enough
+            if addr <= cur_block["end"] + MAX_GAP + 1:
+                cur_block["end"] = max(cur_block["end"], addr + cnt - 1)
+                cur_block["items"].append((idx, addr, cnt))
+            else:
+                blocks.append(cur_block)
+                cur_block = {"start": addr, "end": addr + cnt - 1, "items": [(idx, addr, cnt)]}
+        if cur_block:
+            blocks.append(cur_block)
+
+        results: Dict[int, Optional[List[int]]] = {}
+
+        _LOGGER.debug("Batching %d descriptors into %d Modbus %s requests", len(entries_sorted), len(blocks), "input" if is_input else "holding")
+
+        # Perform reads per block sequentially (the hub has its own lock).
+        for block in blocks:
+            start = block["start"]
+            nregs = block["end"] - block["start"] + 1
+            try:
+                if is_input:
+                    regs = await self.hub.read_input(start, nregs)
+                else:
+                    regs = await self.hub.read_holding(start, nregs)
+            except Exception as exc:
+                _LOGGER.warning("Batch read failed at %s (count=%s): %s", start, nregs, exc)
+                regs = None
+
+            for (idx, addr, cnt) in block["items"]:
+                if regs is None:
+                    results[idx] = None
+                else:
+                    offset = addr - start
+                    # slice carefully even if request returned fewer regs than expected
+                    part = regs[offset: offset + cnt] if offset + cnt <= len(regs) else regs[offset:]
+                    results[idx] = part if part else None
+
+        return results
+
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from the Systemair SAVE VSR Modbus registers."""
-        data: dict[str, Any] = {}
+        """Fetch data from the Systemair SAVE VSR Modbus registers (batched)."""
         try:
-            # Batch reads where possible to reduce Modbus round-trips
-            tasks = [
-                self.hub.read_input(REG_MODE_MAIN_STATUS_IN, 1),
-                self.hub.read_holding(REG_MODE_SPEED, 1),
-                self.hub.read_holding(REG_TARGET_TEMP, 1),
-                self.hub.read_holding(REG_TEMP_OUTDOOR, 1),
-                self.hub.read_holding(REG_TEMP_SUPPLY, 1),
-                self.hub.read_holding(REG_TEMP_EXHAUST, 1),
-                self.hub.read_holding(REG_TEMP_EXTRACT, 1),
-                self.hub.read_holding(REG_TEMP_OVERHEAT, 1),
-                self.hub.read_holding(REG_SAF_RPM, 2),  # SAF/EAF RPMs
-                self.hub.read_holding(REG_SUPPLY_FAN_PCT, 2),
-                self.hub.read_holding(REG_HEATER_PERCENT, 1),
-                self.hub.read_holding(REG_HEAT_EXCH_STATE, 1),
-                self.hub.read_holding(REG_ROTOR, 1),
-                self.hub.read_holding(REG_HEATER, 1),
-                self.hub.read_holding(REG_SETPOINT_ECO_OFFSET, 1),
-                self.hub.read_holding(REG_MODE_SUMMERWINTER, 1),
-                self.hub.read_holding(REG_FAN_RUNNING_START, 2),
-                self.hub.read_holding(REG_DAMPER_STATE, 1),
-                self.hub.read_holding(REG_COOLING_RECOVERY, 1),
-                self.hub.read_input(REG_USERMODE_REMAIN, 1),
-                self.hub.read_input(REG_USERMODE_FACTOR, 1),
-                self.hub.read_holding(REG_HOLIDAY_DAYS, 5),
+            # Build ordered descriptor list to preserve original decode ordering
+            # Each element: (is_input, address, count)
+            descriptors: List[Tuple[bool, int, int]] = [
+                (True, REG_MODE_MAIN_STATUS_IN, 1),
+                (False, REG_MODE_SPEED, 1),
+                (False, REG_TARGET_TEMP, 1),
+                (False, REG_TEMP_OUTDOOR, 1),
+                (False, REG_TEMP_SUPPLY, 1),
+                (False, REG_TEMP_EXHAUST, 1),
+                (False, REG_TEMP_EXTRACT, 1),
+                (False, REG_TEMP_OVERHEAT, 1),
+                (False, REG_SAF_RPM, 2),
+                (False, REG_SUPPLY_FAN_PCT, 2),
+                (False, REG_HEATER_PERCENT, 1),
+                (False, REG_HEAT_EXCH_STATE, 1),
+                (False, REG_ROTOR, 1),
+                (False, REG_HEATER, 1),
+                (False, REG_SETPOINT_ECO_OFFSET, 1),
+                (False, REG_MODE_SUMMERWINTER, 1),
+                (False, REG_FAN_RUNNING_START, 2),
+                (False, REG_DAMPER_STATE, 1),
+                (False, REG_COOLING_RECOVERY, 1),
+                (True, REG_USERMODE_REMAIN, 1),
+                (True, REG_USERMODE_FACTOR, 1),
+                (False, REG_HOLIDAY_DAYS, 5),
                 # alarms individually
-                self.hub.read_holding(REG_ALARM_SAF, 1),
-                self.hub.read_holding(REG_ALARM_EAF, 1),
-                self.hub.read_holding(REG_ALARM_FROST_PROT, 1),
-                self.hub.read_holding(REG_ALARM_SAF_RPM, 1),
-                self.hub.read_holding(REG_ALARM_EAF_RPM, 1),
-                self.hub.read_holding(REG_ALARM_FPT, 1),
-                self.hub.read_holding(REG_ALARM_OAT, 1),
-                self.hub.read_holding(REG_ALARM_SAT, 1),
-                self.hub.read_holding(REG_ALARM_RAT, 1),
-                self.hub.read_holding(REG_ALARM_EAT, 1),
-                self.hub.read_holding(REG_ALARM_ECT, 1),
-                self.hub.read_holding(REG_ALARM_EFT, 1),
-                self.hub.read_holding(REG_ALARM_OHT, 1),
-                self.hub.read_holding(REG_ALARM_EMT, 1),
-                self.hub.read_holding(REG_ALARM_BYS, 1),
-                self.hub.read_holding(REG_ALARM_SEC_AIR, 1),
-                self.hub.read_holding(REG_ALARM_FILTER, 1),
-                self.hub.read_holding(REG_ALARM_RH, 1),
-                self.hub.read_holding(REG_ALARM_LOW_SAT, 1),
-                self.hub.read_holding(REG_ALARM_PDM_RHS, 1),
-                self.hub.read_holding(REG_ALARM_PDM_EAT, 1),
-                self.hub.read_holding(REG_ALARM_MAN_FAN_STOP, 1),
-                self.hub.read_holding(REG_ALARM_OVERHEAT_TEMP, 1),
-                self.hub.read_holding(REG_ALARM_FIRE, 1),
-                self.hub.read_holding(REG_ALARM_FILTER_WARN, 1),
-                self.hub.read_holding(REG_ALARM_TYPE_A, 3),
+                (False, REG_ALARM_SAF, 1),
+                (False, REG_ALARM_EAF, 1),
+                (False, REG_ALARM_FROST_PROT, 1),
+                (False, REG_ALARM_SAF_RPM, 1),
+                (False, REG_ALARM_EAF_RPM, 1),
+                (False, REG_ALARM_FPT, 1),
+                (False, REG_ALARM_OAT, 1),
+                (False, REG_ALARM_SAT, 1),
+                (False, REG_ALARM_RAT, 1),
+                (False, REG_ALARM_EAT, 1),
+                (False, REG_ALARM_ECT, 1),
+                (False, REG_ALARM_EFT, 1),
+                (False, REG_ALARM_OHT, 1),
+                (False, REG_ALARM_EMT, 1),
+                (False, REG_ALARM_BYS, 1),
+                (False, REG_ALARM_SEC_AIR, 1),
+                (False, REG_ALARM_FILTER, 1),
+                (False, REG_ALARM_RH, 1),
+                (False, REG_ALARM_LOW_SAT, 1),
+                (False, REG_ALARM_PDM_RHS, 1),
+                (False, REG_ALARM_PDM_EAT, 1),
+                (False, REG_ALARM_MAN_FAN_STOP, 1),
+                (False, REG_ALARM_OVERHEAT_TEMP, 1),
+                (False, REG_ALARM_FIRE, 1),
+                (False, REG_ALARM_FILTER_WARN, 1),
+                (False, REG_ALARM_TYPE_A, 3),
             ]
 
+            # Split descriptors by type and keep original indices
+            input_entries: List[Tuple[int, int, int]] = []
+            holding_entries: List[Tuple[int, int, int]] = []
+            for i, (is_input, addr, cnt) in enumerate(descriptors):
+                if is_input:
+                    input_entries.append((i, addr, cnt))
+                else:
+                    holding_entries.append((i, addr, cnt))
+
+            # Perform batched reads
+            input_results = await self._batch_read_type(input_entries, is_input=True)
+            holding_results = await self._batch_read_type(holding_entries, is_input=False)
+
+            # Reconstruct results in descriptor order (list of Optional[list[int]])
+            results: List[Optional[List[int]]] = []
+            for i, (is_input, _addr, _cnt) in enumerate(descriptors):
+                if is_input:
+                    results.append(input_results.get(i))
+                else:
+                    results.append(holding_results.get(i))
+
+            # Unpack results in same order as previously expected
             (
                 mode_main_in,
                 mode_speed,
                 target_temp,
-                t_oat, t_sat, t_eat, t_rat, t_oht,
-                rpms, fan_pcts,
-                heater_pct, exch_state, rotor, heater,
-                eco_offs, summerwinter, fanrun_cool, damper, cool_recovery,
-                cdown_s, cdown_factor,
+                t_oat,
+                t_sat,
+                t_eat,
+                t_rat,
+                t_oht,
+                rpms,
+                fan_pcts,
+                heater_pct,
+                exch_state,
+                rotor,
+                heater,
+                eco_offs,
+                summerwinter,
+                fanrun_cool,
+                damper,
+                cool_recovery,
+                cdown_s,
+                cdown_factor,
                 durations,
-                *alarms,
-            ) = await asyncio.gather(*tasks)
+                *alarms
+            ) = results
+
+            data: dict[str, Any] = {}
 
             # --- Decode numeric values ---
             data["mode_main"] = mode_main_in[0] if mode_main_in else None
@@ -190,14 +282,18 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data["countdown_time_s_factor"] = cdown_factor[0] if cdown_factor else 0
 
             if durations:
-                data["holiday_days"]   = durations[0]
-                data["away_hours"]     = durations[1]
+                data["holiday_days"] = durations[0]
+                data["away_hours"] = durations[1]
                 data["fireplace_mins"] = durations[2]
-                data["refresh_mins"]   = durations[3]
-                data["crowded_hours"]  = durations[4]
+                data["refresh_mins"] = durations[3]
+                data["crowded_hours"] = durations[4]
 
-            # --- Read switch states if registers exist ---
+            # --- Read switch states if registers exist (single reads; these are optional) ---
+            # Keep them optional and tolerant to errors
             try:
+                # only read these individually if they exist in const (non-None)
+                from .const import REG_ECO_MODE_ENABLE, REG_HEATER_ENABLE, REG_RH_TRANSFER_ENABLE  # local import
+
                 if REG_ECO_MODE_ENABLE:
                     eco_mode = await self.hub.read_holding(REG_ECO_MODE_ENABLE, 1)
                     data["eco_mode"] = bool(eco_mode and eco_mode[0] > 0)
@@ -212,17 +308,29 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # --- Decode alarms ---
             alarm_keys = [
-                "alarm_saf","alarm_eaf","alarm_frost_protect","alarm_saf_rpm",
-                "alarm_eaf_rpm","alarm_fpt","alarm_oat","alarm_sat","alarm_rat",
-                "alarm_eat","alarm_ect","alarm_eft","alarm_oht","alarm_emt",
-                "alarm_bys","alarm_sec_air","alarm_filter","alarm_rh","alarm_low_SAT",
-                "alarm_pdm_rhs","alarm_pdm_eat","alarm_man_fan_stop","alarm_overheat_temp",
-                "alarm_fire","alarm_filter_warn",
+                "alarm_saf", "alarm_eaf", "alarm_frost_protect", "alarm_saf_rpm",
+                "alarm_eaf_rpm", "alarm_fpt", "alarm_oat", "alarm_sat", "alarm_rat",
+                "alarm_eat", "alarm_ect", "alarm_eft", "alarm_oht", "alarm_emt",
+                "alarm_bys", "alarm_sec_air", "alarm_filter", "alarm_rh", "alarm_low_SAT",
+                "alarm_pdm_rhs", "alarm_pdm_eat", "alarm_man_fan_stop", "alarm_overheat_temp",
+                "alarm_fire", "alarm_filter_warn",
             ]
-            for key, reg in zip(alarm_keys, alarms[:-1]):
+
+            # alarms correspond to the 'alarms' slice of results (all remaining except last triple)
+            # In our earlier unpacking we captured *alarms which includes multiple small lists and a final triple
+            # We'll map them relative to the current 'alarms' list built from 'results'
+            # Build a flat list of alarm register results in the same order
+            flat_alarm_regs: List[Optional[List[int]]] = []
+
+            # The `alarms` variable above contains the tail of the results list; map directly
+            flat_alarm_regs = list(alarms)
+
+            # Use zip to map keys to values (ignore any missing tail)
+            for key, reg in zip(alarm_keys, flat_alarm_regs[:-1] if flat_alarm_regs else []):
                 data[key] = reg[0] if reg else 0
 
-            type_abc = alarms[-1] if alarms else None
+            # The last item (REG_ALARM_TYPE_A count=3)
+            type_abc = flat_alarm_regs[-1] if flat_alarm_regs else None
             data["alarm_typeA"] = type_abc[0] if type_abc else 0
             data["alarm_typeB"] = type_abc[1] if type_abc and len(type_abc) > 1 else 0
             data["alarm_typeC"] = type_abc[2] if type_abc and len(type_abc) > 2 else 0

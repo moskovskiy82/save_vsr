@@ -1,21 +1,38 @@
+# climate.py
 from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACAction, HVACMode
+from homeassistant.components.climate import (
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACAction,
+    HVACMode,
+)
 from homeassistant.const import UnitOfTemperature, ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, REG_MODE_MAIN_CMD, REG_MODE_SPEED, REG_TARGET_TEMP, FAN_SPEED_TO_VALUE, FAN_SPEED_MAP, PRESET_TO_VALUE, PRESET_MAP
+from .const import (
+    DOMAIN,
+    REG_MODE_MAIN_CMD,
+    REG_MODE_SPEED,
+    REG_TARGET_TEMP,
+    FAN_SPEED_TO_VALUE,
+    FAN_SPEED_MAP,
+    PRESET_TO_VALUE,
+    PRESET_MAP,
+)
 from .coordinator import VSRCoordinator
-from .hub import VSRHub
 
 PRESET_LIST = list(PRESET_TO_VALUE.keys())
 
+
 class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
+    """Climate entity for Systemair SAVE VSR."""
+
     _attr_has_entity_name = True
     _attr_name = "Ventilation"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
@@ -28,51 +45,72 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
     _attr_fan_modes = ["low", "medium", "high"]
     _attr_preset_modes = PRESET_LIST
 
-    def __init__(self, coordinator: VSRCoordinator, hub: VSRHub, device_info: dict[str, Any]) -> None:
+    def __init__(self, coordinator: VSRCoordinator, device_info: dict[str, Any]) -> None:
+        """Initialize the climate entity."""
         super().__init__(coordinator)
-        self.hub = hub
+        # Use the hub stored on the coordinator (consistent with other entities)
+        self.hub = coordinator.hub
         self._attr_unique_id = f"{DOMAIN}_{coordinator.config_entry.entry_id}_climate"
         self._attr_device_info = device_info
 
+    # --- Read properties -------------------------------------------------
+
     @property
-    def current_temperature(self):
+    def current_temperature(self) -> float | None:
+        """Return the supply temperature (current)."""
         return self.coordinator.data.get("temp_supply")
 
     @property
-    def target_temperature(self):
+    def target_temperature(self) -> float | None:
+        """Return target / setpoint temperature."""
         return self.coordinator.data.get("target_temp")
 
     @property
-    def hvac_mode(self):
+    def hvac_mode(self) -> HVACMode | None:
+        """Return the current HVAC mode based on mode_main register."""
         mode = self.coordinator.data.get("mode_main")
-        if mode == 6:  # holiday in some firmwares means 'off'? stick to prior behavior
+        # Keep behavior aligned with prior logic: map firmware codes to HA modes
+        if mode == 6:
             return HVACMode.OFF
         if mode == 0:
             return HVACMode.AUTO
         if mode == 1:
             return HVACMode.FAN_ONLY
-        # If a preset is active, we still report FAN_ONLY as action but AUTO as mode
         return HVACMode.AUTO
 
     @property
-    def hvac_action(self):
+    def hvac_action(self) -> HVACAction:
+        """Report the current action (simple mapping)."""
         if self.hvac_mode == HVACMode.OFF:
             return HVACAction.OFF
         return HVACAction.FAN
 
     @property
-    def fan_mode(self):
+    def fan_mode(self) -> str | None:
+        """Return current fan mode (low/medium/high)."""
         speed = self.coordinator.data.get("mode_speed")
-        return FAN_SPEED_MAP.get(speed, "low")
+        if speed is None:
+            return None
+        return FAN_SPEED_MAP.get(speed)
 
-    async def async_set_fan_mode(self, fan_mode: str):
+    @property
+    def preset_mode(self) -> str | None:
+        """Return active preset (if any)."""
+        mode = self.coordinator.data.get("mode_main")
+        return PRESET_MAP.get(mode)
+
+    # --- Setters / commands ---------------------------------------------
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        """Set fan speed (writes modbus register)."""
         val = FAN_SPEED_TO_VALUE.get(fan_mode)
         if val is None:
             return
         if await self.hub.write_register(REG_MODE_SPEED, val):
             await self.coordinator.async_request_refresh()
 
-    async def async_set_temperature(self, **kwargs):
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set target temperature (writes modbus register)."""
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is None:
             return
@@ -80,20 +118,16 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
         if await self.hub.write_register(REG_TARGET_TEMP, value):
             await self.coordinator.async_request_refresh()
 
-    @property
-    def preset_mode(self):
-        mode = self.coordinator.data.get("mode_main")
-        return PRESET_MAP.get(mode)
-
-    async def async_set_preset_mode(self, preset_mode: str):
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        """Set a preset (writes command register)."""
         val = PRESET_TO_VALUE.get(preset_mode)
         if val is None:
             return
         if await self.hub.write_register(REG_MODE_MAIN_CMD, val):
             await self.coordinator.async_request_refresh()
 
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode):
-        # Keep mapping aligned with your earlier code
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Map HA HVAC modes to device values and write them."""
         mapping = {HVACMode.OFF: 7, HVACMode.AUTO: 1, HVACMode.FAN_ONLY: 2}
         value = mapping.get(hvac_mode)
         if value is None:
@@ -102,9 +136,11 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
             await self.coordinator.async_request_refresh()
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up the climate entity from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: VSRCoordinator = data["coordinator"]
-    hub: VSRHub = data["hub"]
     device_info = data["device_info"]
-    async_add_entities([VSRClimate(coordinator, hub, device_info)])
+    async_add_entities([VSRClimate(coordinator, device_info)])

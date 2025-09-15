@@ -6,8 +6,6 @@ from typing import Literal, Optional
 
 from pymodbus.client import AsyncModbusSerialClient, AsyncModbusTcpClient
 from pymodbus.exceptions import ModbusException
-from pymodbus.constants import Endian
-from pymodbus.payload import BinaryPayloadDecoder
 
 from .const import (
     DEFAULT_BAUDRATE,
@@ -21,6 +19,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class VSRHub:
     """Manages a single Modbus connection (serial or TCP) with robust reuse."""
@@ -56,7 +55,7 @@ class VSRHub:
         self._lock = asyncio.Lock()
 
     async def async_connect(self) -> None:
-        if self._client is not None and self._client.connected:
+        if self._client is not None and getattr(self._client, "connected", False):
             return
         if self.transport == TRANSPORT_SERIAL:
             self._client = AsyncModbusSerialClient(
@@ -85,7 +84,7 @@ class VSRHub:
             self._client = None
 
     async def _ensure(self) -> None:
-        if self._client is None or not self._client.connected:
+        if self._client is None or not getattr(self._client, "connected", False):
             await self.async_connect()
 
     async def read_holding(self, address: int, count: int = 1) -> Optional[list[int]]:
@@ -96,10 +95,14 @@ class VSRHub:
                     self._client.read_holding_registers(address, count, slave=self.slave_id),
                     timeout=3.0,
                 )
-                if rr.isError() or not getattr(rr, "registers", None):
+                if rr is None or getattr(rr, "isError", lambda: False)():
                     _LOGGER.warning("Read holding failed at %s", address)
                     return None
-                return rr.registers
+                regs = getattr(rr, "registers", None)
+                if not regs:
+                    _LOGGER.debug("Read holding returned empty at %s", address)
+                    return None
+                return regs
             except (asyncio.TimeoutError, ModbusException) as e:
                 _LOGGER.warning("Holding read error at %s: %s", address, e)
                 return None
@@ -112,10 +115,14 @@ class VSRHub:
                     self._client.read_input_registers(address, count, slave=self.slave_id),
                     timeout=3.0,
                 )
-                if rr.isError() or not getattr(rr, "registers", None):
+                if rr is None or getattr(rr, "isError", lambda: False)():
                     _LOGGER.warning("Read input failed at %s", address)
                     return None
-                return rr.registers
+                regs = getattr(rr, "registers", None)
+                if not regs:
+                    _LOGGER.debug("Read input returned empty at %s", address)
+                    return None
+                return regs
             except (asyncio.TimeoutError, ModbusException) as e:
                 _LOGGER.warning("Input read error at %s: %s", address, e)
                 return None
@@ -128,12 +135,29 @@ class VSRHub:
                     self._client.write_register(address, value, slave=self.slave_id),
                     timeout=3.0,
                 )
-                if wr.isError():
-                    _LOGGER.error("Write failed at %s", address)
+                if wr is None or getattr(wr, "isError", lambda: False)():
+                    _LOGGER.error("Write register failed at %s", address)
                     return False
                 return True
             except (asyncio.TimeoutError, ModbusException) as e:
-                _LOGGER.error("Write error at %s: %s", address, e)
+                _LOGGER.error("Write register error at %s: %s", address, e)
+                return False
+
+    async def write_coil(self, address: int, value: bool) -> bool:
+        """Write a single coil (useful if the device exposes some booleans as coils)."""
+        async with self._lock:
+            await self._ensure()
+            try:
+                wr = await asyncio.wait_for(
+                    self._client.write_coil(address, value, slave=self.slave_id),
+                    timeout=3.0,
+                )
+                if wr is None or getattr(wr, "isError", lambda: False)():
+                    _LOGGER.error("Write coil failed at %s", address)
+                    return False
+                return True
+            except (asyncio.TimeoutError, ModbusException) as e:
+                _LOGGER.error("Write coil error at %s: %s", address, e)
                 return False
 
     @staticmethod

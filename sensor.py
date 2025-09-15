@@ -1,5 +1,3 @@
-# sensor.py
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,8 +24,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DOMAIN,
     ALARM_VALUE_TO_STATE,
-    REG_USERMODE_REMAIN,
-    REG_USERMODE_FACTOR,
 )
 from .coordinator import VSRCoordinator
 
@@ -38,6 +34,7 @@ class VSRSensorDescription(SensorEntityDescription):
 
 
 SENSORS: tuple[VSRSensorDescription, ...] = (
+    # Mode / Speed
     VSRSensorDescription(
         key="mode_speed",
         name="Mode Speed",
@@ -139,13 +136,14 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="heater_percentage",
     ),
+    # Rotor as percentage (not diagnostic)
     VSRSensorDescription(
         key="rotor",
-        name="Rotor Speed",
+        name="Rotor %",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="rotor",
-    ), 
+    ),
 
     # Power Sensors (Energy Dashboard Compatible)
     VSRSensorDescription(
@@ -269,9 +267,7 @@ COUNTDOWN_SENSORS: tuple[VSRCountdownDescription, ...] = (
 )
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
-) -> None:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: VSRCoordinator = data["coordinator"]
     device_info = data["device_info"]
@@ -311,7 +307,7 @@ class VSRSensor(VSRBaseSensor):
             raw = self.coordinator.data.get("mode_speed")
             return {2: "low", 3: "medium", 4: "high"}.get(raw, "low")
 
-        # Power sensors calculations
+        # Power sensors calculations (defensive)
         if self.entity_description.key == "supply_fan_power":
             supply_pct = self.coordinator.data.get("fan_supply")
             if supply_pct is None:

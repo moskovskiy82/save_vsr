@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 DOMAIN = "save_vsr"
@@ -38,10 +39,10 @@ REG_SAF_RPM            = 12400   # holding
 REG_EAF_RPM            = 12401   # holding
 REG_SUPPLY_FAN_PCT     = 14000   # holding (%)
 REG_EXTRACT_FAN_PCT    = 14001   # holding (%)
-REG_HEATER_PERCENT     = 14101   # holding (%)
+REG_HEATER_PERCENT     = 2148   # holding (%)
 REG_HEAT_EXCH_STATE    = 14102   # holding
 REG_ROTOR              = 14350   # holding
-REG_HEATER             = 2148    # holding
+REG_HEATER             = 14101    # holding
 
 REG_TEMP_EFFICENCY     = 12106   # holding, x0.1 C
 REG_MOIST_RELEASE      = 12135   # holding (%)

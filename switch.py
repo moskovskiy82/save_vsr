@@ -1,8 +1,6 @@
-# switch.py
-
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from homeassistant.components.switch import SwitchEntity, SwitchDeviceClass
 from homeassistant.core import HomeAssistant
@@ -21,7 +19,7 @@ from .coordinator import VSRCoordinator
 
 
 class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
-    """A simple boolean switch backed by a single holding register."""
+    """A simple boolean switch backed by a single holding register or coil."""
 
     _attr_has_entity_name = True
     _attr_device_class = SwitchDeviceClass.SWITCH
@@ -36,7 +34,7 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
         reg_addr: int | None,
         read_key: str,
         write_as_coil: bool = False,
-        device_info: dict[str, Any],
+        device_info: Dict[str, Any],
     ) -> None:
         super().__init__(coordinator)
         self._key = key
@@ -73,7 +71,10 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
             return
 
         hub = self.coordinator.hub
-        ok = await hub.write_register(self._reg_addr, 1)
+        if self._write_as_coil:
+            ok = await hub.write_coil(self._reg_addr, True)
+        else:
+            ok = await hub.write_register(self._reg_addr, 1)
         if ok:
             await self.coordinator.async_request_refresh()
 
@@ -86,9 +87,13 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
             return
 
         hub = self.coordinator.hub
-        ok = await hub.write_register(self._reg_addr, 0)
+        if self._write_as_coil:
+            ok = await hub.write_coil(self._reg_addr, False)
+        else:
+            ok = await hub.write_register(self._reg_addr, 0)
         if ok:
             await self.coordinator.async_request_refresh()
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback

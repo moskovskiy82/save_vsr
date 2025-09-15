@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime, REVOLUTIONS_PER_MINUTE
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -20,7 +24,7 @@ from .const import (
     REG_CROWDED_HOURS,
 )
 from .coordinator import VSRCoordinator
-from .hub import VSRHub
+
 
 @dataclass(frozen=True, kw_only=True)
 class VSRNumberDescription(NumberEntityDescription):
@@ -33,11 +37,14 @@ class VSRNumberDescription(NumberEntityDescription):
     max_value: float = 100.0
     step: float = 1.0
 
+
 def tenth_to_reg(v: float) -> int:
     return int(round(v * 10))
 
+
 def reg_to_tenth(v: int) -> float:
     return round(v * 0.1, 1)
+
 
 NUMBERS: tuple[VSRNumberDescription, ...] = (
     # ECO offset 0..10°C, step 0.5
@@ -46,7 +53,6 @@ NUMBERS: tuple[VSRNumberDescription, ...] = (
         name="Eco Offset",
         coordinator_key="setpoint_eco_offset",
         write_register=REG_SETPOINT_ECO_OFFSET,
-        device_class=None,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         min_value=0.0,
         max_value=10.0,
@@ -117,32 +123,49 @@ NUMBERS: tuple[VSRNumberDescription, ...] = (
     ),
 )
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up number entities from config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: VSRCoordinator = data["coordinator"]
-    hub: VSRHub = data["hub"]
     device_info = data["device_info"]
 
-    entities: list[NumberEntity] = [VSRNumber(coordinator, hub, desc, device_info) for desc in NUMBERS]
+    entities: list[NumberEntity] = [
+        VSRNumber(coordinator, desc, device_info) for desc in NUMBERS
+    ]
     async_add_entities(entities)
 
+
 class VSRNumber(CoordinatorEntity[VSRCoordinator], NumberEntity):
+    """Number entity for writable SAVE VSR registers."""
+
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: VSRCoordinator, hub: VSRHub, description: VSRNumberDescription, device_info: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        coordinator: VSRCoordinator,
+        description: VSRNumberDescription,
+        device_info: dict[str, Any],
+    ) -> None:
         super().__init__(coordinator)
-        self.hub = hub
         self.entity_description = description
-        self._attr_unique_id = f"{DOMAIN}_{coordinator.config_entry.entry_id}_{description.key}"
+        self._attr_unique_id = (
+            f"{DOMAIN}_{coordinator.config_entry.entry_id}_{description.key}"
+        )
         self._attr_device_info = device_info
 
         self._attr_native_min_value = description.min_value
         self._attr_native_max_value = description.max_value
         self._attr_native_step = description.step
-        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
+        self._attr_native_unit_of_measurement = (
+            description.native_unit_of_measurement
+        )
 
     @property
     def native_value(self) -> float | None:
+        """Return the current value."""
         key = self.entity_description.coordinator_key
         raw = self.coordinator.data.get(key)
         if raw is None:
@@ -152,9 +175,12 @@ class VSRNumber(CoordinatorEntity[VSRCoordinator], NumberEntity):
         return float(raw)
 
     async def async_set_native_value(self, value: float) -> None:
+        """Write a new value to the device."""
         if self.entity_description.value_to_reg:
             reg_value = self.entity_description.value_to_reg(value)
         else:
             reg_value = int(round(value))
-        if await self.hub.write_register(self.entity_description.write_register, reg_value):
+        if await self.coordinator.hub.write_register(
+            self.entity_description.write_register, reg_value
+        ):
             await self.coordinator.async_request_refresh()
