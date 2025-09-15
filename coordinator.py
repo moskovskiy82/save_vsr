@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -67,9 +68,13 @@ from .hub import VSRHub
 _LOGGER = logging.getLogger(__name__)
 
 # When merging adjacent registers, allow up to this gap (in registers) between descriptors
-# to be merged into a single Modbus read. Tune this if you see either too many reads
-# or reads that become excessively large.
-MAX_GAP = 2
+# to be merged into a single Modbus read. Because many alarm regs are spaced by ~7,
+# increasing this reduces the number of calls. Tune as needed.
+MAX_GAP = 10
+
+# How many attempts to try a block read before giving up
+BLOCK_READ_ATTEMPTS = 2
+BLOCK_READ_BACKOFF = 0.08  # seconds
 
 
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -116,20 +121,37 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         results: Dict[int, Optional[List[int]]] = {}
 
-        _LOGGER.debug("Batching %d descriptors into %d Modbus %s requests", len(entries_sorted), len(blocks), "input" if is_input else "holding")
+        _LOGGER.debug(
+            "Batching %d descriptors into %d Modbus %s requests",
+            len(entries_sorted),
+            len(blocks),
+            "input" if is_input else "holding",
+        )
 
         # Perform reads per block sequentially (the hub has its own lock).
         for block in blocks:
             start = block["start"]
             nregs = block["end"] - block["start"] + 1
-            try:
-                if is_input:
-                    regs = await self.hub.read_input(start, nregs)
-                else:
-                    regs = await self.hub.read_holding(start, nregs)
-            except Exception as exc:
-                _LOGGER.warning("Batch read failed at %s (count=%s): %s", start, nregs, exc)
-                regs = None
+            regs: Optional[List[int]] = None
+
+            # Try the block read a few times (tolerate transient failures)
+            for attempt in range(BLOCK_READ_ATTEMPTS):
+                try:
+                    if is_input:
+                        regs = await self.hub.read_input(start, nregs)
+                    else:
+                        regs = await self.hub.read_holding(start, nregs)
+                    # If we got a non-empty response, stop retrying
+                    if regs:
+                        break
+                except Exception as exc:
+                    _LOGGER.debug("Block read exception at %s (attempt %d): %s", start, attempt + 1, exc)
+                # small backoff between attempts
+                if attempt + 1 < BLOCK_READ_ATTEMPTS:
+                    await asyncio.sleep(BLOCK_READ_BACKOFF)
+
+            if not regs:
+                _LOGGER.warning("Batch read failed at %s (count=%s) after %d attempts", start, nregs, BLOCK_READ_ATTEMPTS)
 
             for (idx, addr, cnt) in block["items"]:
                 if regs is None:
@@ -137,8 +159,11 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else:
                     offset = addr - start
                     # slice carefully even if request returned fewer regs than expected
-                    part = regs[offset: offset + cnt] if offset + cnt <= len(regs) else regs[offset:]
-                    results[idx] = part if part else None
+                    if offset < 0 or offset >= len(regs):
+                        results[idx] = None
+                    else:
+                        part = regs[offset: offset + cnt]
+                        results[idx] = part if part else None
 
         return results
 
@@ -156,7 +181,7 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 (False, REG_TEMP_EXHAUST, 1),
                 (False, REG_TEMP_EXTRACT, 1),
                 (False, REG_TEMP_OVERHEAT, 1),
-                (False, REG_SAF_RPM, 2),
+                (False, REG_SAF_RPM, 2),  # SAF/EAF RPMs
                 (False, REG_SUPPLY_FAN_PCT, 2),
                 (False, REG_HEATER_PERCENT, 1),
                 (False, REG_HEAT_EXCH_STATE, 1),
@@ -225,26 +250,13 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 mode_main_in,
                 mode_speed,
                 target_temp,
-                t_oat,
-                t_sat,
-                t_eat,
-                t_rat,
-                t_oht,
-                rpms,
-                fan_pcts,
-                heater_pct,
-                exch_state,
-                rotor,
-                heater,
-                eco_offs,
-                summerwinter,
-                fanrun_cool,
-                damper,
-                cool_recovery,
-                cdown_s,
-                cdown_factor,
+                t_oat, t_sat, t_eat, t_rat, t_oht,
+                rpms, fan_pcts,
+                heater_pct, exch_state, rotor, heater,
+                eco_offs, summerwinter, fanrun_cool, damper, cool_recovery,
+                cdown_s, cdown_factor,
                 durations,
-                *alarms
+                *alarms,
             ) = results
 
             data: dict[str, Any] = {}
@@ -282,11 +294,11 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data["countdown_time_s_factor"] = cdown_factor[0] if cdown_factor else 0
 
             if durations:
-                data["holiday_days"] = durations[0]
-                data["away_hours"] = durations[1]
+                data["holiday_days"]   = durations[0]
+                data["away_hours"]     = durations[1]
                 data["fireplace_mins"] = durations[2]
-                data["refresh_mins"] = durations[3]
-                data["crowded_hours"] = durations[4]
+                data["refresh_mins"]   = durations[3]
+                data["crowded_hours"]  = durations[4]
 
             # --- Read switch states if registers exist (single reads; these are optional) ---
             # Keep them optional and tolerant to errors
@@ -308,29 +320,17 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # --- Decode alarms ---
             alarm_keys = [
-                "alarm_saf", "alarm_eaf", "alarm_frost_protect", "alarm_saf_rpm",
-                "alarm_eaf_rpm", "alarm_fpt", "alarm_oat", "alarm_sat", "alarm_rat",
-                "alarm_eat", "alarm_ect", "alarm_eft", "alarm_oht", "alarm_emt",
-                "alarm_bys", "alarm_sec_air", "alarm_filter", "alarm_rh", "alarm_low_SAT",
-                "alarm_pdm_rhs", "alarm_pdm_eat", "alarm_man_fan_stop", "alarm_overheat_temp",
-                "alarm_fire", "alarm_filter_warn",
+                "alarm_saf","alarm_eaf","alarm_frost_protect","alarm_saf_rpm",
+                "alarm_eaf_rpm","alarm_fpt","alarm_oat","alarm_sat","alarm_rat",
+                "alarm_eat","alarm_ect","alarm_eft","alarm_oht","alarm_emt",
+                "alarm_bys","alarm_sec_air","alarm_filter","alarm_rh","alarm_low_SAT",
+                "alarm_pdm_rhs","alarm_pdm_eat","alarm_man_fan_stop","alarm_overheat_temp",
+                "alarm_fire","alarm_filter_warn",
             ]
-
-            # alarms correspond to the 'alarms' slice of results (all remaining except last triple)
-            # In our earlier unpacking we captured *alarms which includes multiple small lists and a final triple
-            # We'll map them relative to the current 'alarms' list built from 'results'
-            # Build a flat list of alarm register results in the same order
-            flat_alarm_regs: List[Optional[List[int]]] = []
-
-            # The `alarms` variable above contains the tail of the results list; map directly
-            flat_alarm_regs = list(alarms)
-
-            # Use zip to map keys to values (ignore any missing tail)
-            for key, reg in zip(alarm_keys, flat_alarm_regs[:-1] if flat_alarm_regs else []):
+            for key, reg in zip(alarm_keys, alarms[:-1]):
                 data[key] = reg[0] if reg else 0
 
-            # The last item (REG_ALARM_TYPE_A count=3)
-            type_abc = flat_alarm_regs[-1] if flat_alarm_regs else None
+            type_abc = alarms[-1] if alarms else None
             data["alarm_typeA"] = type_abc[0] if type_abc else 0
             data["alarm_typeB"] = type_abc[1] if type_abc and len(type_abc) > 1 else 0
             data["alarm_typeC"] = type_abc[2] if type_abc and len(type_abc) > 2 else 0

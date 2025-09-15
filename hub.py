@@ -20,6 +20,13 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# How long to wait for a single Modbus operation (seconds). Increase if device is slow.
+IO_TIMEOUT_S = 5.0
+# Number of attempts for a single read operation before giving up
+READ_ATTEMPTS = 2
+# Small backoff between attempts (seconds)
+READ_BACKOFF_S = 0.08
+
 
 class VSRHub:
     """Manages a single Modbus connection (serial or TCP) with robust reuse."""
@@ -65,11 +72,11 @@ class VSRHub:
                 bytesize=self.bytesize,
                 parity=self.parity,
                 stopbits=self.stopbits,
-                timeout=3,
+                timeout=IO_TIMEOUT_S,
             )
         else:
             self._client = AsyncModbusTcpClient(
-                host=self.host, port=self.tcp_port, timeout=3
+                host=self.host, port=self.tcp_port, timeout=IO_TIMEOUT_S
             )
         connected = await self._client.connect()
         if not connected:
@@ -88,52 +95,103 @@ class VSRHub:
             await self.async_connect()
 
     async def read_holding(self, address: int, count: int = 1) -> Optional[list[int]]:
+        """
+        Read holding registers (returns list[int] or None).
+        Retries a small number of times to tolerate transient errors.
+        """
         async with self._lock:
             await self._ensure()
-            try:
-                rr = await asyncio.wait_for(
-                    self._client.read_holding_registers(address, count, slave=self.slave_id),
-                    timeout=3.0,
-                )
-                if rr is None or getattr(rr, "isError", lambda: False)():
-                    _LOGGER.warning("Read holding failed at %s", address)
-                    return None
-                regs = getattr(rr, "registers", None)
-                if not regs:
-                    _LOGGER.debug("Read holding returned empty at %s", address)
-                    return None
-                return regs
-            except (asyncio.TimeoutError, ModbusException) as e:
-                _LOGGER.warning("Holding read error at %s: %s", address, e)
-                return None
+            last_exc = None
+            for attempt in range(READ_ATTEMPTS):
+                try:
+                    rr = await asyncio.wait_for(
+                        self._client.read_holding_registers(address, count, slave=self.slave_id),
+                        timeout=IO_TIMEOUT_S,
+                    )
+                    # Validate response
+                    if rr is None:
+                        _LOGGER.debug("Holding read returned None at %s (attempt %d)", address, attempt + 1)
+                        last_exc = None
+                    elif getattr(rr, "isError", lambda: False)():
+                        _LOGGER.debug("Holding read isError at %s (attempt %d): %s", address, attempt + 1, rr)
+                        last_exc = rr
+                    else:
+                        regs = getattr(rr, "registers", None)
+                        if not regs:
+                            _LOGGER.debug("Holding read returned empty registers at %s (attempt %d)", address, attempt + 1)
+                            last_exc = None
+                        else:
+                            return regs
+                except asyncio.TimeoutError as e:
+                    _LOGGER.debug("Holding read timeout at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except ModbusException as e:
+                    _LOGGER.debug("Holding read ModbusException at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except Exception as e:
+                    _LOGGER.debug("Holding read exception at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+
+                # Backoff before retry, short so we don't delay too much
+                if attempt + 1 < READ_ATTEMPTS:
+                    await asyncio.sleep(READ_BACKOFF_S)
+
+            # All attempts failed
+            _LOGGER.warning("Holding read error at %s: %s", address, last_exc)
+            return None
 
     async def read_input(self, address: int, count: int = 1) -> Optional[list[int]]:
+        """
+        Read input registers (returns list[int] or None).
+        Retries similar to read_holding.
+        """
         async with self._lock:
             await self._ensure()
-            try:
-                rr = await asyncio.wait_for(
-                    self._client.read_input_registers(address, count, slave=self.slave_id),
-                    timeout=3.0,
-                )
-                if rr is None or getattr(rr, "isError", lambda: False)():
-                    _LOGGER.warning("Read input failed at %s", address)
-                    return None
-                regs = getattr(rr, "registers", None)
-                if not regs:
-                    _LOGGER.debug("Read input returned empty at %s", address)
-                    return None
-                return regs
-            except (asyncio.TimeoutError, ModbusException) as e:
-                _LOGGER.warning("Input read error at %s: %s", address, e)
-                return None
+            last_exc = None
+            for attempt in range(READ_ATTEMPTS):
+                try:
+                    rr = await asyncio.wait_for(
+                        self._client.read_input_registers(address, count, slave=self.slave_id),
+                        timeout=IO_TIMEOUT_S,
+                    )
+                    # Validate response
+                    if rr is None:
+                        _LOGGER.debug("Input read returned None at %s (attempt %d)", address, attempt + 1)
+                        last_exc = None
+                    elif getattr(rr, "isError", lambda: False)():
+                        _LOGGER.debug("Input read isError at %s (attempt %d): %s", address, attempt + 1, rr)
+                        last_exc = rr
+                    else:
+                        regs = getattr(rr, "registers", None)
+                        if not regs:
+                            _LOGGER.debug("Input read returned empty registers at %s (attempt %d)", address, attempt + 1)
+                            last_exc = None
+                        else:
+                            return regs
+                except asyncio.TimeoutError as e:
+                    _LOGGER.debug("Input read timeout at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except ModbusException as e:
+                    _LOGGER.debug("Input read ModbusException at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except Exception as e:
+                    _LOGGER.debug("Input read exception at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+
+                if attempt + 1 < READ_ATTEMPTS:
+                    await asyncio.sleep(READ_BACKOFF_S)
+
+            _LOGGER.warning("Input read error at %s: %s", address, last_exc)
+            return None
 
     async def write_register(self, address: int, value: int) -> bool:
+        """Write a single holding register."""
         async with self._lock:
             await self._ensure()
             try:
                 wr = await asyncio.wait_for(
                     self._client.write_register(address, value, slave=self.slave_id),
-                    timeout=3.0,
+                    timeout=IO_TIMEOUT_S,
                 )
                 if wr is None or getattr(wr, "isError", lambda: False)():
                     _LOGGER.error("Write register failed at %s", address)
@@ -141,6 +199,9 @@ class VSRHub:
                 return True
             except (asyncio.TimeoutError, ModbusException) as e:
                 _LOGGER.error("Write register error at %s: %s", address, e)
+                return False
+            except Exception as e:
+                _LOGGER.error("Write register unexpected error at %s: %s", address, e)
                 return False
 
     async def write_coil(self, address: int, value: bool) -> bool:
@@ -150,7 +211,7 @@ class VSRHub:
             try:
                 wr = await asyncio.wait_for(
                     self._client.write_coil(address, value, slave=self.slave_id),
-                    timeout=3.0,
+                    timeout=IO_TIMEOUT_S,
                 )
                 if wr is None or getattr(wr, "isError", lambda: False)():
                     _LOGGER.error("Write coil failed at %s", address)
@@ -158,6 +219,9 @@ class VSRHub:
                 return True
             except (asyncio.TimeoutError, ModbusException) as e:
                 _LOGGER.error("Write coil error at %s: %s", address, e)
+                return False
+            except Exception as e:
+                _LOGGER.error("Write coil unexpected error at %s: %s", address, e)
                 return False
 
     @staticmethod
