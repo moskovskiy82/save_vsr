@@ -141,10 +141,11 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
     ),
     VSRSensorDescription(
         key="rotor",
-        name="Rotor",
+        name="Rotor Speed",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="rotor",
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
+    ), 
 
     # Power Sensors (Energy Dashboard Compatible)
     VSRSensorDescription(

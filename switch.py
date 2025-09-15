@@ -73,8 +73,7 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
             return
 
         hub = self.coordinator.hub
-        slave_id = self.coordinator.config_entry.data.get("slave_id", 1)
-        ok = await hub.write_register(self._reg_addr, 1, slave=slave_id)
+        ok = await hub.write_register(self._reg_addr, 1)
         if ok:
             await self.coordinator.async_request_refresh()
 
@@ -87,11 +86,9 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
             return
 
         hub = self.coordinator.hub
-        slave_id = self.coordinator.config_entry.data.get("slave_id", 1)
-        ok = await hub.write_register(self._reg_addr, 0, slave=slave_id)
+        ok = await hub.write_register(self._reg_addr, 0)
         if ok:
             await self.coordinator.async_request_refresh()
-
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
