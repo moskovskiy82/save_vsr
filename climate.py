@@ -44,8 +44,9 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.AUTO, HVACMode.FAN_ONLY]
     _attr_fan_modes = ["low", "medium", "high"]
     _attr_preset_modes = PRESET_LIST
-    _attr_min_temp = 15.0  # Typical VSR500 min setpoint
-    _attr_max_temp = 25.0  # Typical VSR500 max setpoint
+    _attr_min_temp = 12.0  # Typical VSR500 min setpoint
+    _attr_max_temp = 30.0  # Typical VSR500 max setpoint
+    _attr_target_temperature_step = 1.0  # Set increment to 1
 
     def __init__(self, coordinator: VSRCoordinator, device_info: dict[str, Any]) -> None:
         """Initialize the climate entity."""
@@ -64,7 +65,11 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
     @property
     def target_temperature(self) -> float | None:
         """Return target / setpoint temperature."""
-        return self.coordinator.data.get("target_temp")
+        temp = self.coordinator.data.get("target_temp")
+        if temp is None:
+            return None
+        # Round to nearest integer for display with 0 decimals
+        return round(temp)
 
     @property
     def hvac_mode(self) -> HVACMode | None:
