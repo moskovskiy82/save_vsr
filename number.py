@@ -1,3 +1,4 @@
+# number.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -173,6 +174,13 @@ class VSRNumber(CoordinatorEntity[VSRCoordinator], NumberEntity):
         if self.entity_description.reg_to_value:
             return self.entity_description.reg_to_value(int(raw))
         return float(raw)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return extra attributes for diagnostics."""
+        return {
+            "raw_value": self.coordinator.data.get(self.entity_description.coordinator_key),
+        }
 
     async def async_set_native_value(self, value: float) -> None:
         """Write a new value to the device."""
