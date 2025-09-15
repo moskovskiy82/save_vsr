@@ -44,11 +44,12 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.AUTO, HVACMode.FAN_ONLY]
     _attr_fan_modes = ["low", "medium", "high"]
     _attr_preset_modes = PRESET_LIST
+    _attr_min_temp = 15.0  # Typical VSR500 min setpoint
+    _attr_max_temp = 25.0  # Typical VSR500 max setpoint
 
     def __init__(self, coordinator: VSRCoordinator, device_info: dict[str, Any]) -> None:
         """Initialize the climate entity."""
         super().__init__(coordinator)
-        # Use the hub stored on the coordinator (consistent with other entities)
         self.hub = coordinator.hub
         self._attr_unique_id = f"{DOMAIN}_{coordinator.config_entry.entry_id}_climate"
         self._attr_device_info = device_info
@@ -69,7 +70,8 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
     def hvac_mode(self) -> HVACMode | None:
         """Return the current HVAC mode based on mode_main register."""
         mode = self.coordinator.data.get("mode_main")
-        # Keep behavior aligned with prior logic: map firmware codes to HA modes
+        if mode is None:
+            return None  # Or default to HVACMode.AUTO if preferred
         if mode == 6:
             return HVACMode.OFF
         if mode == 0:
@@ -97,7 +99,18 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
     def preset_mode(self) -> str | None:
         """Return active preset (if any)."""
         mode = self.coordinator.data.get("mode_main")
+        if mode is None:
+            return None
         return PRESET_MAP.get(mode)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return extra attributes for diagnostics."""
+        return {
+            "raw_mode_main": self.coordinator.data.get("mode_main"),
+            "raw_mode_speed": self.coordinator.data.get("mode_speed"),
+            "raw_target_temp": self.coordinator.data.get("target_temp"),
+        }
 
     # --- Setters / commands ---------------------------------------------
 
