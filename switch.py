@@ -1,3 +1,5 @@
+# switch.py
+
 from __future__ import annotations
 
 from typing import Any
@@ -19,7 +21,7 @@ from .coordinator import VSRCoordinator
 
 
 class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
-    """A simple boolean switch backed by a single holding/coil register."""
+    """A simple boolean switch backed by a single holding register."""
 
     _attr_has_entity_name = True
     _attr_device_class = SwitchDeviceClass.SWITCH
@@ -34,6 +36,7 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
         reg_addr: int | None,
         read_key: str,
         write_as_coil: bool = False,
+        device_info: dict[str, Any],
     ) -> None:
         super().__init__(coordinator)
         self._key = key
@@ -43,7 +46,7 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
         self._write_as_coil = write_as_coil
 
         self._attr_unique_id = f"{DOMAIN}_{coordinator.config_entry.entry_id}_{key}"
-        self._attr_device_info = coordinator.device_info
+        self._attr_device_info = device_info
 
     @property
     def available(self) -> bool:
@@ -71,11 +74,7 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
 
         hub = self.coordinator.hub
         slave_id = self.coordinator.config_entry.data.get("slave_id", 1)
-        ok = (
-            await hub.async_write_coil(self._reg_addr, True, slave=slave_id)
-            if self._write_as_coil
-            else await hub.async_write_register(self._reg_addr, 1, slave=slave_id)
-        )
+        ok = await hub.write_register(self._reg_addr, 1, slave=slave_id)
         if ok:
             await self.coordinator.async_request_refresh()
 
@@ -89,11 +88,7 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
 
         hub = self.coordinator.hub
         slave_id = self.coordinator.config_entry.data.get("slave_id", 1)
-        ok = (
-            await hub.async_write_coil(self._reg_addr, False, slave=slave_id)
-            if self._write_as_coil
-            else await hub.async_write_register(self._reg_addr, 0, slave=slave_id)
-        )
+        ok = await hub.write_register(self._reg_addr, 0, slave=slave_id)
         if ok:
             await self.coordinator.async_request_refresh()
 
@@ -103,6 +98,7 @@ async def async_setup_entry(
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: VSRCoordinator = data["coordinator"]
+    device_info = data["device_info"]
 
     entities: list[SwitchEntity] = []
 
@@ -115,6 +111,7 @@ async def async_setup_entry(
             reg_addr=REG_ECO_MODE_ENABLE,
             read_key="eco_mode",
             write_as_coil=False,
+            device_info=device_info,
         )
     )
 
@@ -127,6 +124,7 @@ async def async_setup_entry(
             reg_addr=REG_HEATER_ENABLE,
             read_key="heater_enable",
             write_as_coil=False,
+            device_info=device_info,
         )
     )
 
@@ -139,6 +137,7 @@ async def async_setup_entry(
             reg_addr=REG_RH_TRANSFER_ENABLE,
             read_key="rh_transfer",
             write_as_coil=False,
+            device_info=device_info,
         )
     )
 
