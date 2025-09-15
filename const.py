@@ -30,7 +30,7 @@ REG_MODE_SPEED         = 1130    # holding (2/3/4 -> low/med/high)
 REG_TARGET_TEMP        = 2000    # holding, x0.1 C
 REG_TEMP_OUTDOOR       = 12101   # holding, x0.1 C
 REG_TEMP_SUPPLY        = 12102   # holding, x0.1 C
-REG_TEMP_EXHAUST       = 12105   # holding, x0.1 C
+REG_TEMP_EXHAUST       = 12543   # holding, x0.1 C
 REG_TEMP_EXTRACT       = 12542   # holding, x0.1 C
 REG_TEMP_OVERHEAT      = 12107   # holding, x0.1 C
 
@@ -42,6 +42,12 @@ REG_HEATER_PERCENT     = 14101   # holding (%)
 REG_HEAT_EXCH_STATE    = 14102   # holding
 REG_ROTOR              = 14350   # holding
 REG_HEATER             = 2148    # holding
+
+REG_TEMP_EFFICENCY     = 12106   # holding, x0.1 C
+REG_MOIST_RELEASE      = 12135   # holding (%)
+REG_MOIST_CALC_EXT     = 2210    # holding (%)
+REG_MOIST_CALC_INT     = 2211    # holding (%)
+REG_MOIST_EXT_SP       = 2202   # holding (%)
 
 REG_SETPOINT_ECO_OFFSET = 2503   # holding, x0.1 C
 
