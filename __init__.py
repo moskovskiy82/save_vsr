@@ -11,14 +11,13 @@ from .coordinator import VSRCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# Added Platform.SWITCH here ✅
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.CLIMATE,
     Platform.NUMBER,
     Platform.SELECT,
-    Platform.SWITCH,  # <-- NEW for ECO, Heater, RH transfer
+    Platform.SWITCH,
 ]
 
 
@@ -70,6 +69,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Load all supported platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # Listen for options updates (e.g., update_interval change)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
     _LOGGER.info("Systemair SAVE VSR integration successfully initialized")
     return True
 
@@ -84,3 +86,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await hub.async_close()
         _LOGGER.info("Systemair SAVE VSR integration unloaded")
     return unload_ok
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload config entry (e.g., after options update)."""
+    await async_unload_entry(hass, entry)
+    await async_setup_entry(hass, entry)

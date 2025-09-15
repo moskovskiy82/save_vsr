@@ -68,7 +68,7 @@ from .hub import VSRHub
 
 _LOGGER = logging.getLogger(__name__)
 
-MAX_GAP = 2
+MAX_GAP = 50
 
 
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -83,6 +83,9 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.hub = hub
         self._slow_counter = 0  # run slow cycle every N fast polls
+        self._slow_cycle_count = 0  # count slow cycles for periodic reset
+        self._failed_addrs: set[int] = set()
+        self._failure_count: int = 0
 
     async def _batch_read_type(
         self, entries: List[Tuple[int, int, int]], is_input: bool
@@ -94,6 +97,8 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cur_block = None
 
         for idx, addr, cnt in entries_sorted:
+            if addr in self._failed_addrs:
+                continue  # Skip known failed addresses
             if cur_block is None:
                 cur_block = {"start": addr, "end": addr + cnt - 1, "items": [(idx, addr, cnt)]}
                 continue
@@ -120,6 +125,9 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.warning("Batch read failed at %s (count=%s): %s", start, nregs, exc)
                 regs = None
 
+            if regs is None:
+                self._failure_count += 1
+
             for (idx, addr, cnt) in block["items"]:
                 if regs is None:
                     results[idx] = None
@@ -132,6 +140,9 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
+            # Preserve previous data to avoid losing slow-cycle values
+            data: dict[str, Any] = self.data.copy() if self.data else {}
+
             # --- build fast descriptors (run every cycle) ---
             descriptors: List[Tuple[bool, int, int]] = [
                 (True, REG_MODE_MAIN_STATUS_IN, 1),
@@ -140,7 +151,6 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 (False, REG_TEMP_OUTDOOR, 1),
                 (False, REG_TEMP_SUPPLY, 1),
                 (False, REG_TEMP_EXHAUST, 1),
-                # REG_TEMP_EXTRACT removed
                 (False, REG_TEMP_OVERHEAT, 1),
                 (False, REG_SAF_RPM, 2),
                 (False, REG_SUPPLY_FAN_PCT, 2),
@@ -161,8 +171,11 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # --- add slow cycle descriptors (alarms + switches) ---
             self._slow_counter += 1
             run_slow = self._slow_counter >= 6  # every 6 cycles (~60s if fast=10s)
+            if self.data is None:
+                run_slow = True  # Force slow on first poll
             if run_slow:
                 self._slow_counter = 0
+                self._slow_cycle_count += 1
                 alarms: List[Tuple[bool, int, int]] = [
                     (True, REG_ALARM_SAF, 1),
                     (True, REG_ALARM_EAF, 1),
@@ -213,6 +226,13 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for i, (is_input, _addr, _cnt) in enumerate(descriptors):
                 results.append(input_results.get(i) if is_input else holding_results.get(i))
 
+            # Track failures for individual descriptors
+            for i, res in enumerate(results):
+                if res is None:
+                    failed_addr = descriptors[i][1]  # addr
+                    self._failed_addrs.add(failed_addr)
+                    _LOGGER.debug("Failed to read register at %s; skipping in future polls", failed_addr)
+
             # --- unpack ---
             (
                 mode_main_in,
@@ -237,9 +257,7 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 cdown_factor,
                 durations,
                 *maybe_alarms,
-            ) = results
-
-            data: dict[str, Any] = {}
+            ) = results + [None] * (len(descriptors) - len(results))  # Pad if fewer
 
             # decode fast stuff
             data["mode_main"] = mode_main_in[0] if mode_main_in else None
@@ -278,6 +296,8 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # decode alarms + switches only if in slow cycle
             if run_slow and maybe_alarms:
+                alarm_regs = maybe_alarms[:26]  # 25 singles + 1 triple
+                switch_regs = maybe_alarms[26:]  # up to 3 switches
                 alarm_keys = [
                     "alarm_saf", "alarm_eaf", "alarm_frost_protect", "alarm_saf_rpm",
                     "alarm_eaf_rpm", "alarm_fpt", "alarm_oat", "alarm_sat", "alarm_rat",
@@ -286,24 +306,35 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "alarm_pdm_rhs", "alarm_pdm_eat", "alarm_man_fan_stop", "alarm_overheat_temp",
                     "alarm_fire", "alarm_filter_warn",
                 ]
-                for key, reg in zip(alarm_keys, maybe_alarms[:-4]):  # last 4 are typeA and switches
+                for key, reg in zip(alarm_keys, alarm_regs[:25]):
                     data[key] = reg[0] if reg else 0
 
-                type_abc = maybe_alarms[-4] if len(maybe_alarms) >= 4 else None
+                type_abc = alarm_regs[25] if len(alarm_regs) > 25 else None
                 data["alarm_typeA"] = type_abc[0] if type_abc else 0
                 data["alarm_typeB"] = type_abc[1] if type_abc and len(type_abc) > 1 else 0
                 data["alarm_typeC"] = type_abc[2] if type_abc and len(type_abc) > 2 else 0
 
-                # switches (optional)
+                switch_idx = 0
                 if REG_ECO_MODE_ENABLE is not None:
-                    eco = maybe_alarms[-3] if len(maybe_alarms) >= 3 else None
+                    eco = switch_regs[switch_idx] if switch_idx < len(switch_regs) else None
                     data["eco_mode"] = bool(eco and eco[0] > 0)
+                    switch_idx += 1
                 if REG_HEATER_ENABLE is not None:
-                    heater_en = maybe_alarms[-2] if len(maybe_alarms) >= 2 else None
+                    heater_en = switch_regs[switch_idx] if switch_idx < len(switch_regs) else None
                     data["heater_enable"] = bool(heater_en and heater_en[0] > 0)
+                    switch_idx += 1
                 if REG_RH_TRANSFER_ENABLE is not None:
-                    rh = maybe_alarms[-1] if len(maybe_alarms) >= 1 else None
+                    rh = switch_regs[switch_idx] if switch_idx < len(switch_regs) else None
                     data["rh_transfer"] = bool(rh and rh[0] > 0)
+
+                # Periodic reset of failed addrs every 10 slow cycles
+                if self._slow_cycle_count >= 10:
+                    self._slow_cycle_count = 0
+                    self._failed_addrs.clear()
+                    _LOGGER.debug("Reset failed addresses for retry")
+
+            # Add diagnostics
+            data["modbus_failures"] = self._failure_count
 
             return data
 
