@@ -95,19 +95,21 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entries_sorted = sorted(entries, key=lambda x: x[1])
         blocks: List[dict] = []
         cur_block = None
+        MAX_BLOCK_SIZE = 125  # Modbus RTU max registers per read
 
         for idx, addr, cnt in entries_sorted:
             if addr in self._failed_addrs:
-                continue  # Skip known failed addresses
-            if cur_block is None:
-                cur_block = {"start": addr, "end": addr + cnt - 1, "items": [(idx, addr, cnt)]}
                 continue
-            if addr <= cur_block["end"] + MAX_GAP + 1:
-                cur_block["end"] = max(cur_block["end"], addr + cnt - 1)
+            new_end = addr + cnt - 1
+            if cur_block is None:
+                cur_block = {"start": addr, "end": new_end, "items": [(idx, addr, cnt)]}
+                continue
+            if addr <= cur_block["end"] + MAX_GAP + 1 and (new_end - cur_block["start"] + 1) <= MAX_BLOCK_SIZE:
+                cur_block["end"] = max(cur_block["end"], new_end)
                 cur_block["items"].append((idx, addr, cnt))
             else:
                 blocks.append(cur_block)
-                cur_block = {"start": addr, "end": addr + cnt - 1, "items": [(idx, addr, cnt)]}
+                cur_block = {"start": addr, "end": new_end, "items": [(idx, addr, cnt)]}
         if cur_block:
             blocks.append(cur_block)
 
