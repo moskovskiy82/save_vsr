@@ -16,6 +16,7 @@ from .const import (
     DEFAULT_TCP_PORT,
     TRANSPORT_SERIAL,
     TRANSPORT_TCP,
+
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class VSRHub:
                 parity=self.parity,
                 stopbits=self.stopbits,
                 timeout=IO_TIMEOUT_S,
+                strict=False,  # Add this line
             )
         else:
             self._client = AsyncModbusTcpClient(
