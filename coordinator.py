@@ -68,7 +68,7 @@ from .hub import VSRHub
 
 _LOGGER = logging.getLogger(__name__)
 
-MAX_GAP = 50
+MAX_GAP = 5  # Reduced from 50 to create smaller batches
 
 
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -99,7 +99,7 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         for idx, addr, cnt in entries_sorted:
             if addr in self._failed_addrs:
-                continue
+                continue  # Skip known failed addresses
             new_end = addr + cnt - 1
             if cur_block is None:
                 cur_block = {"start": addr, "end": new_end, "items": [(idx, addr, cnt)]}
