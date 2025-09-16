@@ -1,3 +1,5 @@
+Not really working yet. Crahes after some time
+
 Custom integration for save vsr units. Serial and TCP?
 Tested on the VSR 500 connected via USB modbus connector.
 
