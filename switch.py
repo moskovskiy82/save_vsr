@@ -62,37 +62,48 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
         except (TypeError, ValueError):
             return None
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def _write_and_refresh_local(self, value: bool) -> bool:
+        """Write the register/coil and then perform a direct read to update coordinator state quickly."""
         if self._reg_addr is None:
             self.coordinator.logger.warning(
-                "Switch '%s' has no register address configured; set it in const.py",
-                self._key,
+                "Switch '%s' has no register address configured; set it in const.py", self._key
             )
-            return
+            return False
 
         hub = self.coordinator.hub
         if self._write_as_coil:
-            ok = await hub.write_coil(self._reg_addr, True)
+            ok = await hub.write_coil(self._reg_addr, value)
         else:
-            ok = await hub.write_register(self._reg_addr, 1)
-        if ok:
+            ok = await hub.write_register(self._reg_addr, 1 if value else 0)
+
+        if not ok:
+            return False
+
+        # Immediately read the register to get the new state and push to coordinator cache
+        try:
+            regs = await hub.read_holding(self._reg_addr, 1)
+            new_state = bool(regs and len(regs) > 0 and regs[0] > 0)
+        except Exception:
+            # If direct read fails, fallback to simply asking for a full refresh
+            new_state = None
+
+        if new_state is not None:
+            # update coordinator cache (make a shallow copy then set key and notify)
+            current = dict(self.coordinator.data or {})
+            current[self._read_key] = new_state
+            # async_set_updated_data triggers listeners without scheduling a full poll
+            self.coordinator.async_set_updated_data(current)
+        else:
+            # Schedule a full refresh (will pick up values on the next coordinator run)
             await self.coordinator.async_request_refresh()
+
+        return True
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._write_and_refresh_local(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        if self._reg_addr is None:
-            self.coordinator.logger.warning(
-                "Switch '%s' has no register address configured; set it in const.py",
-                self._key,
-            )
-            return
-
-        hub = self.coordinator.hub
-        if self._write_as_coil:
-            ok = await hub.write_coil(self._reg_addr, False)
-        else:
-            ok = await hub.write_register(self._reg_addr, 0)
-        if ok:
-            await self.coordinator.async_request_refresh()
+        await self._write_and_refresh_local(False)
 
 
 async def async_setup_entry(

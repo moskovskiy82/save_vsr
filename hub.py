@@ -16,12 +16,13 @@ from .const import (
     DEFAULT_TCP_PORT,
     TRANSPORT_SERIAL,
     TRANSPORT_TCP,
+
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 # How long to wait for a single Modbus operation (seconds). Increase if device is slow.
-IO_TIMEOUT_S = 5.0
+IO_TIMEOUT_S = 10.0
 # Number of attempts for a single read operation before giving up
 READ_ATTEMPTS = 2
 # Small backoff between attempts (seconds)
@@ -73,6 +74,7 @@ class VSRHub:
                 parity=self.parity,
                 stopbits=self.stopbits,
                 timeout=IO_TIMEOUT_S,
+                strict=False,  # Add this line
             )
         else:
             self._client = AsyncModbusTcpClient(
@@ -188,41 +190,71 @@ class VSRHub:
         """Write a single holding register."""
         async with self._lock:
             await self._ensure()
-            try:
-                wr = await asyncio.wait_for(
-                    self._client.write_register(address, value, slave=self.slave_id),
-                    timeout=IO_TIMEOUT_S,
-                )
-                if wr is None or getattr(wr, "isError", lambda: False)():
-                    _LOGGER.error("Write register failed at %s", address)
-                    return False
-                return True
-            except (asyncio.TimeoutError, ModbusException) as e:
-                _LOGGER.error("Write register error at %s: %s", address, e)
-                return False
-            except Exception as e:
-                _LOGGER.error("Write register unexpected error at %s: %s", address, e)
-                return False
+            last_exc = None
+            for attempt in range(READ_ATTEMPTS):
+                try:
+                    wr = await asyncio.wait_for(
+                        self._client.write_register(address, value, slave=self.slave_id),
+                        timeout=IO_TIMEOUT_S,
+                    )
+                    if wr is None:
+                        _LOGGER.debug("Write register returned None at %s (attempt %d)", address, attempt + 1)
+                        last_exc = None
+                    elif getattr(wr, "isError", lambda: False)():
+                        _LOGGER.debug("Write register isError at %s (attempt %d): %s", address, attempt + 1, wr)
+                        last_exc = wr
+                    else:
+                        return True
+                except asyncio.TimeoutError as e:
+                    _LOGGER.debug("Write register timeout at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except ModbusException as e:
+                    _LOGGER.debug("Write register ModbusException at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except Exception as e:
+                    _LOGGER.debug("Write register exception at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+
+                if attempt + 1 < READ_ATTEMPTS:
+                    await asyncio.sleep(READ_BACKOFF_S)
+
+            _LOGGER.error("Write register error at %s: %s", address, last_exc)
+            return False
 
     async def write_coil(self, address: int, value: bool) -> bool:
         """Write a single coil (useful if the device exposes some booleans as coils)."""
         async with self._lock:
             await self._ensure()
-            try:
-                wr = await asyncio.wait_for(
-                    self._client.write_coil(address, value, slave=self.slave_id),
-                    timeout=IO_TIMEOUT_S,
-                )
-                if wr is None or getattr(wr, "isError", lambda: False)():
-                    _LOGGER.error("Write coil failed at %s", address)
-                    return False
-                return True
-            except (asyncio.TimeoutError, ModbusException) as e:
-                _LOGGER.error("Write coil error at %s: %s", address, e)
-                return False
-            except Exception as e:
-                _LOGGER.error("Write coil unexpected error at %s: %s", address, e)
-                return False
+            last_exc = None
+            for attempt in range(READ_ATTEMPTS):
+                try:
+                    wr = await asyncio.wait_for(
+                        self._client.write_coil(address, value, slave=self.slave_id),
+                        timeout=IO_TIMEOUT_S,
+                    )
+                    if wr is None:
+                        _LOGGER.debug("Write coil returned None at %s (attempt %d)", address, attempt + 1)
+                        last_exc = None
+                    elif getattr(wr, "isError", lambda: False)():
+                        _LOGGER.debug("Write coil isError at %s (attempt %d): %s", address, attempt + 1, wr)
+                        last_exc = wr
+                    else:
+                        return True
+                except asyncio.TimeoutError as e:
+                    _LOGGER.debug("Write coil timeout at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except ModbusException as e:
+                    _LOGGER.debug("Write coil ModbusException at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+                except Exception as e:
+                    _LOGGER.debug("Write coil exception at %s (attempt %d): %s", address, attempt + 1, e)
+                    last_exc = e
+
+                if attempt + 1 < READ_ATTEMPTS:
+                    await asyncio.sleep(READ_BACKOFF_S)
+
+            _LOGGER.error("Write coil error at %s: %s", address, last_exc)
+            return False
 
     @staticmethod
     def decode_uint16(regs: list[int], index: int = 0) -> int:

@@ -1,3 +1,4 @@
+# sensor.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -74,14 +75,6 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         coordinator_key="temp_supply",
-    ),
-    VSRSensorDescription(
-        key="temp_extract",
-        name="Temperature Extract",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        coordinator_key="temp_extract",
     ),
     VSRSensorDescription(
         key="temp_exhaust",
@@ -200,6 +193,14 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
         key="countdown_time_s_factor",
         name="Countdown Factor",
         coordinator_key="countdown_time_s_factor",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # Modbus Failures (Diagnostics)
+    VSRSensorDescription(
+        key="modbus_failures",
+        name="Modbus Failures",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        coordinator_key="modbus_failures",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
