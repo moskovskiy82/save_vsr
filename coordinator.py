@@ -77,6 +77,9 @@ _LOGGER = logging.getLogger(__name__)
 # how many fast polls before doing slow-cycle alarms
 SLOW_CYCLE_EVERY = 6
 
+# maximum gap for block merging in registers (small gaps tolerated)
+MAX_BLOCK_GAP = 2
+
 
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator for Systemair SAVE VSR Modbus integration."""
@@ -95,7 +98,8 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self, entries: List[Tuple[int, int, int]], is_input: bool
     ) -> Dict[int, Optional[List[int]]]:
         """
-        Read grouped blocks (entries: list of (index, address, count)).
+        Do grouped reads for either input or holding registers.
+        entries = list of (index, address, count)
         Returns mapping index -> list[int] | None
         """
         if not entries:
@@ -104,14 +108,13 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         blocks: List[dict] = []
         cur_block = None
-        MAX_GAP = 2
 
         for idx, addr, cnt in entries_sorted:
             if cur_block is None:
                 cur_block = {"start": addr, "end": addr + cnt - 1, "items": [(idx, addr, cnt)]}
                 continue
-            # Merge if registers are reasonably close
-            if addr <= cur_block["end"] + MAX_GAP + 1:
+            # merge blocks if close enough
+            if addr <= cur_block["end"] + MAX_BLOCK_GAP + 1:
                 cur_block["end"] = max(cur_block["end"], addr + cnt - 1)
                 cur_block["items"].append((idx, addr, cnt))
             else:
@@ -128,6 +131,8 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 regs = (
                     await self.hub.read_input(start, nregs) if is_input else await self.hub.read_holding(start, nregs)
                 )
+                if regs is None:
+                    _LOGGER.debug("Batch read returned None for start=%s count=%s (is_input=%s)", start, nregs, is_input)
             except Exception as exc:
                 _LOGGER.warning("Batch read failed at %s (count=%s): %s", start, nregs, exc)
                 regs = None
@@ -137,16 +142,19 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     results[idx] = None
                 else:
                     offset = addr - start
-                    part = regs[offset: offset + cnt] if offset + cnt <= len(regs) else regs[offset:]
+                    # defensive slice
+                    part = regs[offset : offset + cnt] if offset + cnt <= len(regs) else regs[offset:]
                     results[idx] = part if part else None
 
         return results
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Main coordinator update: read all descriptors and decode to friendly keys."""
+        """Main coordinator update: read descriptors and decode to friendly keys.
+
+        **Important:** Do not overwrite last-known values when a read failed (None).
+        """
         try:
-            # Build descriptor list in a deterministic, explicit order.
-            # Each entry is (key, is_input, address, count)
+            # descriptor list: (key, is_input, address, count)
             descriptors: List[Tuple[str, bool, int, int]] = [
                 ("mode_main", True, REG_MODE_MAIN_STATUS_IN, 1),
                 ("mode_speed", False, REG_MODE_SPEED, 1),
@@ -156,23 +164,23 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ("temp_exhaust", False, REG_TEMP_EXHAUST, 1),
                 ("temp_extract", False, REG_TEMP_EXTRACT, 1),
                 ("temp_overheat", False, REG_TEMP_OVERHEAT, 1),
-                ("rpms", False, REG_SAF_RPM, 2),  # SAF/EAF (two regs starting at REG_SAF_RPM)
-                ("fan_pcts", False, REG_SUPPLY_FAN_PCT, 2),  # supply/extract % (two regs)
+                ("rpms", False, REG_SAF_RPM, 2),
+                ("fan_pcts", False, REG_SUPPLY_FAN_PCT, 2),
                 ("heater_percentage", False, REG_HEATER_PERCENT, 1),
                 ("heat_exchanger_state", False, REG_HEAT_EXCH_STATE, 1),
                 ("rotor", False, REG_ROTOR, 1),
                 ("heater", False, REG_HEATER, 1),
                 ("setpoint_eco_offset", False, REG_SETPOINT_ECO_OFFSET, 1),
                 ("mode_summerwinter", False, REG_MODE_SUMMERWINTER, 1),
-                ("fanrun_cool", False, REG_FAN_RUNNING_START, 2),  # fan_running, cooldown
+                ("fanrun_cool", False, REG_FAN_RUNNING_START, 2),
                 ("damper_state", False, REG_DAMPER_STATE, 1),
                 ("cooling_recovery", False, REG_COOLING_RECOVERY, 1),
                 ("countdown_time_s", True, REG_USERMODE_REMAIN, 1),
                 ("countdown_time_s_factor", True, REG_USERMODE_FACTOR, 1),
-                ("durations", False, REG_HOLIDAY_DAYS, 5),  # holiday/away/fireplace/refresh/crowded
+                ("durations", False, REG_HOLIDAY_DAYS, 5),
             ]
 
-            # Add optional switch registers into the FAST cycle (cheap)
+            # Put lightweight switches into FAST cycle so we always have an up-to-date state
             if REG_ECO_MODE_ENABLE is not None:
                 descriptors.append(("eco_mode", False, REG_ECO_MODE_ENABLE, 1))
             if REG_HEATER_ENABLE is not None:
@@ -180,12 +188,11 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if REG_RH_TRANSFER_ENABLE is not None:
                 descriptors.append(("rh_transfer", False, REG_RH_TRANSFER_ENABLE, 1))
 
-            # Decide slow cycle: read alarms less frequently
+            # slow cycle for alarms
             self._fast_counter += 1
             do_slow = self._fast_counter >= SLOW_CYCLE_EVERY
             if do_slow:
                 self._fast_counter = 0
-                # append alarms in slow cycle
                 alarm_regs = [
                     ("alarm_saf", False, REG_ALARM_SAF, 1),
                     ("alarm_eaf", False, REG_ALARM_EAF, 1),
@@ -212,138 +219,148 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     ("alarm_overheat_temp", False, REG_ALARM_OVERHEAT_TEMP, 1),
                     ("alarm_fire", False, REG_ALARM_FIRE, 1),
                     ("alarm_filter_warn", False, REG_ALARM_FILTER_WARN, 1),
-                    # last: grouped ABC
                     ("alarm_type_abc", False, REG_ALARM_TYPE_A, 3),
                 ]
                 descriptors.extend(alarm_regs)
 
-            # split descriptors into input & holding lists with stable indices
+            # split descriptors into input vs holding with stable indices
             input_entries: List[Tuple[int, int, int]] = []
             holding_entries: List[Tuple[int, int, int]] = []
             for idx, (_key, is_input, addr, cnt) in enumerate(descriptors):
                 (input_entries if is_input else holding_entries).append((idx, addr, cnt))
 
-            # read both types
+            # perform batched reads
             input_results = await self._batch_read_type(input_entries, is_input=True)
             holding_results = await self._batch_read_type(holding_entries, is_input=False)
 
-            # assemble full results list (index -> regs)
+            # assemble ordered results list (index -> regs or None)
             results: List[Optional[List[int]]] = []
             for idx, (_key, is_input, _addr, _cnt) in enumerate(descriptors):
                 regs = input_results.get(idx) if is_input else holding_results.get(idx)
                 results.append(regs)
 
-            # Now decode into the friendly data dict
-            data: Dict[str, Any] = {}
+            # Start from existing last-known data to avoid overwriting on failures
+            last_known: Dict[str, Any] = dict(self.data or {})
+            new_data: Dict[str, Any] = dict(last_known)  # update only keys we actually read
 
+            # helper: set default for a key if we have no previous and no new value
+            def _ensure_default(key: str, is_alarm: bool = False) -> None:
+                if key not in new_data:
+                    new_data[key] = 0 if is_alarm else None
+
+            # decode each descriptor only when regs is present; otherwise skip and keep previous
             for idx, (key, is_input, addr, cnt) in enumerate(descriptors):
                 regs = results[idx]
-                # common short-circuits
                 if regs is None:
-                    # many sensors we prefer None or 0 depending on semantics
-                    if key.startswith("alarm_"):
-                        data[key] = 0
+                    # no data -> skip (preserve previous), but if never seen before, give a reasonable default
+                    if key.startswith("alarm_") and key != "alarm_type_abc":
+                        _ensure_default(key, is_alarm=True)
+                    elif key == "alarm_type_abc":
+                        # ABC types default
+                        _ensure_default("alarm_typeA", is_alarm=True)
+                        _ensure_default("alarm_typeB", is_alarm=True)
+                        _ensure_default("alarm_typeC", is_alarm=True)
                     else:
-                        data[key] = None
+                        _ensure_default(key, is_alarm=False)
                     continue
 
-                # decoders
+                # regs present -> decode and set into new_data
                 if key == "mode_main":
-                    data["mode_main"] = int(regs[0])
+                    new_data["mode_main"] = int(regs[0])
                     continue
                 if key == "mode_speed":
-                    data["mode_speed"] = int(regs[0])
+                    new_data["mode_speed"] = int(regs[0])
                     continue
                 if key == "target_temp":
-                    data["target_temp"] = round(regs[0] * 0.1, 1)
+                    new_data["target_temp"] = round(regs[0] * 0.1, 1)
                     continue
                 if key == "temp_outdoor":
-                    data["temp_outdoor"] = round(regs[0] * 0.1, 1)
+                    new_data["temp_outdoor"] = round(regs[0] * 0.1, 1)
                     continue
                 if key == "temp_supply":
-                    data["temp_supply"] = round(regs[0] * 0.1, 1)
+                    new_data["temp_supply"] = round(regs[0] * 0.1, 1)
                     continue
                 if key == "temp_exhaust":
-                    data["temp_exhaust"] = round(regs[0] * 0.1, 1)
+                    new_data["temp_exhaust"] = round(regs[0] * 0.1, 1)
                     continue
                 if key == "temp_extract":
-                    data["temp_extract"] = round(regs[0] * 0.1, 1)
+                    new_data["temp_extract"] = round(regs[0] * 0.1, 1)
                     continue
                 if key == "temp_overheat":
-                    data["temp_overheat"] = round(regs[0] * 0.1, 1)
+                    new_data["temp_overheat"] = round(regs[0] * 0.1, 1)
                     continue
                 if key == "rpms":
-                    data["saf_rpm"] = regs[0] if len(regs) > 0 else None
-                    data["eaf_rpm"] = regs[1] if len(regs) > 1 else None
+                    new_data["saf_rpm"] = regs[0] if len(regs) > 0 else None
+                    new_data["eaf_rpm"] = regs[1] if len(regs) > 1 else None
                     continue
                 if key == "fan_pcts":
-                    data["fan_supply"] = regs[0] if len(regs) > 0 else None
-                    data["fan_extract"] = regs[1] if len(regs) > 1 else None
+                    new_data["fan_supply"] = regs[0] if len(regs) > 0 else None
+                    new_data["fan_extract"] = regs[1] if len(regs) > 1 else None
                     continue
                 if key == "heater_percentage":
-                    data["heater_percentage"] = regs[0]
+                    new_data["heater_percentage"] = regs[0]
                     continue
                 if key == "heat_exchanger_state":
-                    data["heat_exchanger_state"] = regs[0]
+                    new_data["heat_exchanger_state"] = regs[0]
                     continue
                 if key == "rotor":
-                    data["rotor"] = regs[0]
+                    new_data["rotor"] = regs[0]
                     continue
                 if key == "heater":
-                    data["heater"] = regs[0]
+                    new_data["heater"] = regs[0]
                     continue
                 if key == "setpoint_eco_offset":
-                    data["setpoint_eco_offset"] = round(regs[0] * 0.1, 1)
+                    new_data["setpoint_eco_offset"] = round(regs[0] * 0.1, 1)
                     continue
                 if key == "mode_summerwinter":
-                    data["mode_summerwinter"] = bool(regs[0] > 0)
+                    new_data["mode_summerwinter"] = bool(regs[0] > 0)
                     continue
                 if key == "fanrun_cool":
-                    data["fan_running"] = bool(regs[0] > 0)
-                    data["cooldown"] = bool(len(regs) > 1 and regs[1] > 0)
+                    new_data["fan_running"] = bool(regs[0] > 0)
+                    new_data["cooldown"] = bool(len(regs) > 1 and regs[1] > 0)
                     continue
                 if key == "damper_state":
-                    data["damper_state"] = bool(regs[0] > 0)
+                    new_data["damper_state"] = bool(regs[0] > 0)
                     continue
                 if key == "cooling_recovery":
-                    data["cooling_recovery"] = bool(regs[0] > 0)
+                    new_data["cooling_recovery"] = bool(regs[0] > 0)
                     continue
                 if key == "countdown_time_s":
-                    data["countdown_time_s"] = regs[0]
+                    new_data["countdown_time_s"] = regs[0]
                     continue
                 if key == "countdown_time_s_factor":
-                    data["countdown_time_s_factor"] = regs[0]
+                    new_data["countdown_time_s_factor"] = regs[0]
                     continue
                 if key == "durations":
                     # holiday_days, away_hours, fireplace_mins, refresh_mins, crowded_hours
-                    if regs:
-                        data["holiday_days"] = regs[0]
-                        data["away_hours"] = regs[1] if len(regs) > 1 else None
-                        data["fireplace_mins"] = regs[2] if len(regs) > 2 else None
-                        data["refresh_mins"] = regs[3] if len(regs) > 3 else None
-                        data["crowded_hours"] = regs[4] if len(regs) > 4 else None
+                    new_data["holiday_days"] = regs[0] if len(regs) > 0 else None
+                    new_data["away_hours"] = regs[1] if len(regs) > 1 else None
+                    new_data["fireplace_mins"] = regs[2] if len(regs) > 2 else None
+                    new_data["refresh_mins"] = regs[3] if len(regs) > 3 else None
+                    new_data["crowded_hours"] = regs[4] if len(regs) > 4 else None
                     continue
                 if key in ("eco_mode", "heater_enable", "rh_transfer"):
-                    data_key = {
+                    # small optional switches read in fast cycle
+                    map_key = {
                         "eco_mode": "eco_mode",
                         "heater_enable": "heater_enable",
                         "rh_transfer": "rh_transfer",
                     }[key]
-                    data[data_key] = bool(regs[0] > 0)
+                    new_data[map_key] = bool(regs[0] > 0)
                     continue
 
                 # alarms & ABC
                 if key.startswith("alarm_") and key != "alarm_type_abc":
-                    data[key] = int(regs[0]) if regs else 0
+                    new_data[key] = int(regs[0]) if regs else 0
                     continue
                 if key == "alarm_type_abc":
-                    # 3 registers payload -> typeA/typeB/typeC
-                    data["alarm_typeA"] = int(regs[0]) if len(regs) > 0 else 0
-                    data["alarm_typeB"] = int(regs[1]) if len(regs) > 1 else 0
-                    data["alarm_typeC"] = int(regs[2]) if len(regs) > 2 else 0
+                    new_data["alarm_typeA"] = int(regs[0]) if len(regs) > 0 else 0
+                    new_data["alarm_typeB"] = int(regs[1]) if len(regs) > 1 else 0
+                    new_data["alarm_typeC"] = int(regs[2]) if len(regs) > 2 else 0
                     continue
 
-            return data
+            # finished — return the composed new_data dict
+            return new_data
 
         except Exception as err:
             raise UpdateFailed(f"Coordinator update error: {err}") from err
