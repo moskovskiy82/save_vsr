@@ -11,6 +11,9 @@ from homeassistant.const import EntityCategory
 
 from .const import (
     DOMAIN,
+    REG_ECO_MODE_ENABLE,
+    REG_HEATER_ENABLE,
+    REG_RH_TRANSFER_ENABLE,
 )
 from .coordinator import VSRCoordinator
 
@@ -30,8 +33,8 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
         name: str,
         reg_addr: int | None,
         read_key: str,
-        device_info: Dict[str, Any],
         write_as_coil: bool = False,
+        device_info: Dict[str, Any],
     ) -> None:
         super().__init__(coordinator)
         self._key = key
@@ -59,52 +62,48 @@ class _VSRSimpleRegisterSwitch(CoordinatorEntity[VSRCoordinator], SwitchEntity):
         except (TypeError, ValueError):
             return None
 
-    async def _perform_write_and_opt_update(self, value: int) -> None:
-        """Write register/coil and optimistically update coordinator cache for immediate UI feedback."""
+    async def _write_and_refresh_local(self, value: bool) -> bool:
+        """Write the register/coil and then perform a direct read to update coordinator state quickly."""
         if self._reg_addr is None:
             self.coordinator.logger.warning(
-                "Switch '%s' has no register address configured; set it in const.py",
-                self._key,
+                "Switch '%s' has no register address configured; set it in const.py", self._key
             )
-            return
+            return False
 
         hub = self.coordinator.hub
-        ok = False
-        # prefer coil when explicitly requested and hub supports it
-        if self._write_as_coil and hasattr(hub, "write_coil"):
-            ok = await hub.write_coil(self._reg_addr, bool(value))
+        if self._write_as_coil:
+            ok = await hub.write_coil(self._reg_addr, value)
         else:
-            # use write_register
-            ok = await hub.write_register(self._reg_addr, int(value))
+            ok = await hub.write_register(self._reg_addr, 1 if value else 0)
 
         if not ok:
-            # Write failed — we log but don't change coordinator cache.
-            self.coordinator.logger.error("Failed to write switch %s at %s", self._key, self._reg_addr)
-            return
+            return False
 
-        # Optimistic update — update the coordinator cache immediately so UI reflects change.
-        # We create a shallow copy of the current data and set the key.
-        current = dict(self.coordinator.data) if self.coordinator.data else {}
-        # store int for consistency with register reads
-        current[self._read_key] = int(value)
-        # update coordinator (this will notify entities)
+        # Immediately read the register to get the new state and push to coordinator cache
         try:
-            await self.coordinator.async_set_updated_data(current)
+            regs = await hub.read_holding(self._reg_addr, 1)
+            new_state = bool(regs and len(regs) > 0 and regs[0] > 0)
         except Exception:
-            # older HA versions: fall back to directly setting data + request refresh
-            try:
-                self.coordinator.data = current
-            except Exception:
-                pass
+            # If direct read fails, fallback to simply asking for a full refresh
+            new_state = None
 
-        # Also request a background refresh to verify device actual state
-        await self.coordinator.async_request_refresh()
+        if new_state is not None:
+            # update coordinator cache (make a shallow copy then set key and notify)
+            current = dict(self.coordinator.data or {})
+            current[self._read_key] = new_state
+            # async_set_updated_data triggers listeners without scheduling a full poll
+            self.coordinator.async_set_updated_data(current)
+        else:
+            # Schedule a full refresh (will pick up values on the next coordinator run)
+            await self.coordinator.async_request_refresh()
+
+        return True
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self._perform_write_and_opt_update(1)
+        await self._write_and_refresh_local(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self._perform_write_and_opt_update(0)
+        await self._write_and_refresh_local(False)
 
 
 async def async_setup_entry(
@@ -117,48 +116,42 @@ async def async_setup_entry(
     entities: list[SwitchEntity] = []
 
     # ECO Mode switch
-    from .const import REG_ECO_MODE_ENABLE  # imported lazily to avoid import-time issues
-    if REG_ECO_MODE_ENABLE is not None:
-        entities.append(
-            _VSRSimpleRegisterSwitch(
-                coordinator,
-                key="eco_mode",
-                name="ECO Mode",
-                reg_addr=REG_ECO_MODE_ENABLE,
-                read_key="eco_mode",
-                write_as_coil=False,
-                device_info=device_info,
-            )
+    entities.append(
+        _VSRSimpleRegisterSwitch(
+            coordinator,
+            key="eco_mode",
+            name="ECO Mode",
+            reg_addr=REG_ECO_MODE_ENABLE,
+            read_key="eco_mode",
+            write_as_coil=False,
+            device_info=device_info,
         )
+    )
 
     # Heater Enable switch
-    from .const import REG_HEATER_ENABLE  # lazy import
-    if REG_HEATER_ENABLE is not None:
-        entities.append(
-            _VSRSimpleRegisterSwitch(
-                coordinator,
-                key="heater_enable",
-                name="Heater Enable",
-                reg_addr=REG_HEATER_ENABLE,
-                read_key="heater_enable",
-                write_as_coil=False,
-                device_info=device_info,
-            )
+    entities.append(
+        _VSRSimpleRegisterSwitch(
+            coordinator,
+            key="heater_enable",
+            name="Heater Enable",
+            reg_addr=REG_HEATER_ENABLE,
+            read_key="heater_enable",
+            write_as_coil=False,
+            device_info=device_info,
         )
+    )
 
     # RH Transfer switch
-    from .const import REG_RH_TRANSFER_ENABLE  # lazy import
-    if REG_RH_TRANSFER_ENABLE is not None:
-        entities.append(
-            _VSRSimpleRegisterSwitch(
-                coordinator,
-                key="rh_transfer",
-                name="RH Transfer",
-                reg_addr=REG_RH_TRANSFER_ENABLE,
-                read_key="rh_transfer",
-                write_as_coil=False,
-                device_info=device_info,
-            )
+    entities.append(
+        _VSRSimpleRegisterSwitch(
+            coordinator,
+            key="rh_transfer",
+            name="RH Transfer",
+            reg_addr=REG_RH_TRANSFER_ENABLE,
+            read_key="rh_transfer",
+            write_as_coil=False,
+            device_info=device_info,
         )
+    )
 
     async_add_entities(entities)
