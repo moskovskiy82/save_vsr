@@ -74,11 +74,14 @@ from .hub import VSRHub
 
 _LOGGER = logging.getLogger(__name__)
 
-# how long to wait before retrying failed addresses (in polls)
-RESET_FAILED_EVERY = 180  # ~30min at 10s interval
+# how many fast polls before doing slow-cycle alarms
+SLOW_CYCLE_EVERY = 6
 
 # maximum gap for block merging in registers (small gaps tolerated)
 MAX_BLOCK_GAP = 2
+
+# how long to wait before retrying failed addresses (in polls)
+RESET_FAILED_EVERY = 180  # ~30min at 10s interval
 
 
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
