@@ -67,7 +67,6 @@ class VSRHub:
         await self.async_close()  # Ensure clean start
         if self.transport == TRANSPORT_SERIAL:
             self._client = AsyncModbusSerialClient(
-                method="rtu",
                 port=self.port,
                 baudrate=self.baudrate,
                 bytesize=self.bytesize,
@@ -112,7 +111,7 @@ class VSRHub:
             for attempt in range(IO_ATTEMPTS):
                 try:
                     rr = await asyncio.wait_for(
-                        self._client.read_input_registers(address, count, slave=self.slave_id),
+                        self._client.read_input_registers(address, count, unit=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if rr.isError():
@@ -133,7 +132,7 @@ class VSRHub:
             for attempt in range(IO_ATTEMPTS):
                 try:
                     rr = await asyncio.wait_for(
-                        self._client.read_holding_registers(address, count, slave=self.slave_id),
+                        self._client.read_holding_registers(address, count, unit=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if rr.isError():
@@ -154,7 +153,7 @@ class VSRHub:
             for attempt in range(IO_ATTEMPTS):
                 try:
                     wr = await asyncio.wait_for(
-                        self._client.write_register(address, value, slave=self.slave_id),
+                        self._client.write_register(address, value, unit=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if wr.isError():
@@ -175,7 +174,7 @@ class VSRHub:
             for attempt in range(IO_ATTEMPTS):
                 try:
                     wr = await asyncio.wait_for(
-                        self._client.write_coil(address, value, slave=self.slave_id),
+                        self._client.write_coil(address, value, unit=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if wr.isError():
