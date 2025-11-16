@@ -140,7 +140,8 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
             # optimistic: update coordinator data immediately so UI is snappy
             new = dict(self.coordinator.data or {})
             new["mode_speed"] = val
-            await self.coordinator.async_set_updated_data(new)
+            # FIXED: Remove await - async_set_updated_data is NOT a coroutine
+            self.coordinator.async_set_updated_data(new)
             # schedule background refresh to validate
             await self.coordinator.async_request_refresh()
 
@@ -156,7 +157,8 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
             # optimistic update: coordinator stores tenths as float with 1 decimal
             new = dict(self.coordinator.data or {})
             new["target_temp"] = round(reg_value * 0.1, 1)
-            await self.coordinator.async_set_updated_data(new)
+            # FIXED: Remove await
+            self.coordinator.async_set_updated_data(new)
             await self.coordinator.async_request_refresh()
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
@@ -164,12 +166,13 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
         val = PRESET_TO_VALUE.get(preset_mode)
         if val is None:
             return
-        ok = await self.hub.write_register(REG_MODE_MAIN_CMD, val)
+        ok = await self.hub.write_register(REG_MODE_MAIN_CMD, val + 1)
         if ok:
             # optimistic update
             new = dict(self.coordinator.data or {})
             new["mode_main"] = val
-            await self.coordinator.async_set_updated_data(new)
+            # FIXED: Remove await
+            self.coordinator.async_set_updated_data(new)
             await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -186,14 +189,16 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
             if await self.hub.write_register(REG_MODE_MAIN_CMD, 7):
                 new = dict(self.coordinator.data or {})
                 new["mode_main"] = 7
-                await self.coordinator.async_set_updated_data(new)
+                # FIXED: Remove await
+                self.coordinator.async_set_updated_data(new)
                 await self.coordinator.async_request_refresh()
                 return
             # fallback try 6
             if await self.hub.write_register(REG_MODE_MAIN_CMD, 6):
                 new = dict(self.coordinator.data or {})
                 new["mode_main"] = 6
-                await self.coordinator.async_set_updated_data(new)
+                # FIXED: Remove await
+                self.coordinator.async_set_updated_data(new)
                 await self.coordinator.async_request_refresh()
                 return
             return
@@ -206,7 +211,8 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
         if ok:
             new = dict(self.coordinator.data or {})
             new["mode_main"] = value
-            await self.coordinator.async_set_updated_data(new)
+            # FIXED: Remove await
+            self.coordinator.async_set_updated_data(new)
             await self.coordinator.async_request_refresh()
 
 
