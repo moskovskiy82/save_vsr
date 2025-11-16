@@ -84,6 +84,11 @@ MAX_BLOCK_GAP = 2
 RESET_FAILED_EVERY = 180  # ~30min at 10s interval
 
 
+def to_signed16(value: int) -> int:
+    """Convert unsigned 16-bit Modbus value to signed int16."""
+    return value - 65536 if value > 32767 else value
+
+
 class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator for Systemair SAVE VSR Modbus integration."""
 
@@ -302,12 +307,12 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # decode fast stuff
             data["mode_main"] = mode_main_in[0] if mode_main_in else None
             data["mode_speed"] = mode_speed[0] if mode_speed else None
-            data["target_temp"] = round((target_temp[0] if target_temp else 0) * 0.1, 1)
-            data["temp_outdoor"] = round((t_oat[0] if t_oat else 0) * 0.1, 1)
-            data["temp_supply"] = round((t_sat[0] if t_sat else 0) * 0.1, 1)
-            data["temp_exhaust"] = round((t_eat[0] if t_eat else 0) * 0.1, 1)
-            data["temp_extract"] = round((t_extract[0] if t_extract else 0) * 0.1, 1)
-            data["temp_overheat"] = round((t_oht[0] if t_oht else 0) * 0.1, 1)
+            data["target_temp"] = round(to_signed16(target_temp[0]) * 0.1, 1) if target_temp else 0
+            data["temp_outdoor"] = round(to_signed16(t_oat[0]) * 0.1, 1) if t_oat else 0
+            data["temp_supply"] = round(to_signed16(t_sat[0]) * 0.1, 1) if t_sat else 0
+            data["temp_exhaust"] = round(to_signed16(t_eat[0]) * 0.1, 1) if t_eat else 0
+            data["temp_extract"] = round(to_signed16(t_extract[0]) * 0.1, 1) if t_extract else 0
+            data["temp_overheat"] = round(to_signed16(t_oht[0]) * 0.1, 1) if t_oht else 0
 
             data["saf_rpm"] = rpms_saf[0] if rpms_saf else None
             data["eaf_rpm"] = rpms_eaf[0] if rpms_eaf else None
@@ -317,7 +322,7 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data["heat_exchanger_state"] = exch_state[0] if exch_state else None
             data["rotor"] = rotor[0] if rotor else None
             data["heater"] = heater[0] if heater else None
-            data["setpoint_eco_offset"] = round((eco_offs[0] if eco_offs else 0) * 0.1, 1)
+            data["setpoint_eco_offset"] = round(to_signed16(eco_offs[0]) * 0.1, 1) if eco_offs else 0
 
             data["mode_summerwinter"] = bool(summerwinter and summerwinter[0] > 0)
             data["fan_running"] = bool(fanrun_cool and fanrun_cool[0] > 0)
