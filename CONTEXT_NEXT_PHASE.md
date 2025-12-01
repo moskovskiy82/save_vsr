@@ -4,13 +4,16 @@
 
 | Phase | Task | Status | Priority |
 |-------|------|--------|----------|
-| 2.4 | Add Integration Logo | ⏳ Pending | ⭐⭐ HIGH |
-| 3.1 | Create modbus.py | ⏳ Pending | ⭐⭐⭐ CRITICAL |
+| 2.4 | Add Integration Logo | ✅ Completed | ⭐⭐ HIGH |
+| 3.1 | Create modbus.py | ✅ Completed | ⭐⭐⭐ CRITICAL |
 | 3.2 | Refactor coordinator.py | ⏳ Pending | ⭐⭐⭐ CRITICAL |
 | 4.1 | Energy Dashboard | ⏳ Pending | ⭐⭐ HIGH |
 | 4.2 | Alarm History | ⏳ Pending | ⭐ MEDIUM |
 | 4.3 | Virtual Efficiency | ⏳ Pending | ⭐ MEDIUM |
 | 5.1 | ML Anomaly Detection | ⏳ Future | ⭐ LOW |
+
+**Last Updated:** 2025-12-01 22:24 MSK
+**Current Focus:** Phase 3.1 ✅ COMPLETED - Ready for Phase 3.2
 
 ---
 
@@ -24,6 +27,9 @@
 1. Create `modbus.py` with ModbusParameter system
 2. Port all registers from `const.py`
 3. Test that nothing breaks
+ВАЖНО ты используешь entity Только из нашей интеграции. Это принципиально важно чтобы имена entity_ids не менялись! Потом уже будем добавлять entity из кода example
+
+
 
 ### Week 3: Core Refactoring
 1. Refactor `coordinator.py` to use `get_modbus_data()`
