@@ -1,6 +1,8 @@
 # climate.py
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 from homeassistant.components.climate import (
@@ -22,12 +24,14 @@ from .const import (
     REG_TARGET_TEMP,
     FAN_SPEED_TO_VALUE,
     FAN_SPEED_MAP,
-    PRESET_TO_VALUE,
-    PRESET_MAP,
+    PRESET_COMMAND_MAP,
+    PRESET_STATUS_MAP,
 )
 from .coordinator import VSRCoordinator
 
-PRESET_LIST = list(PRESET_TO_VALUE.keys())
+_LOGGER = logging.getLogger(__name__)
+
+PRESET_LIST = list(PRESET_COMMAND_MAP.keys())
 
 
 class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
@@ -45,6 +49,7 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
     )
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.AUTO, HVACMode.FAN_ONLY]
     _attr_fan_modes = ["low", "medium", "high"]
+    # Include all available presets from PRESET_COMMAND_MAP
     _attr_preset_modes = PRESET_LIST
 
     # Present integer steps in UI (1 °C) per your request,
@@ -117,7 +122,8 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
         mode = self.coordinator.data.get("mode_main")
         if mode is None:
             return None
-        return PRESET_MAP.get(mode)
+        # Use STATUS map for reading
+        return PRESET_STATUS_MAP.get(mode)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -163,17 +169,63 @@ class VSRClimate(CoordinatorEntity[VSRCoordinator], ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set a preset (writes command register)."""
-        val = PRESET_TO_VALUE.get(preset_mode)
+        # Get current status before writing
+        current_status = self.coordinator.data.get("mode_main")
+        current_preset = PRESET_STATUS_MAP.get(current_status) if current_status is not None else None
+        
+        _LOGGER.info(
+            "=== PRESET MODE CHANGE REQUEST ===\n"
+            "  Requested preset: %s\n"
+            "  Current status register value (1160): %s\n"
+            "  Current preset name: %s",
+            preset_mode,
+            current_status,
+            current_preset
+        )
+        
+        # Use COMMAND map for writing
+        val = PRESET_COMMAND_MAP.get(preset_mode)
         if val is None:
+            _LOGGER.error("Unknown preset mode: %s", preset_mode)
             return
-        ok = await self.hub.write_register(REG_MODE_MAIN_CMD, val + 1)
+        
+        _LOGGER.info(
+            "  Command value to write (from PRESET_COMMAND_MAP): %s\n"
+            "  Writing to register 1161 (REG_MODE_MAIN_CMD)\n"
+            "  Expected status value after write: %s",
+            val,
+            val - 1  # Status should be command - 1
+        )
+        
+        ok = await self.hub.write_register(REG_MODE_MAIN_CMD, val)
+        
         if ok:
-            # optimistic update
+            _LOGGER.info("  Write to register 1161 succeeded")
+            # Optimistic update: status value should be command - 1
             new = dict(self.coordinator.data or {})
-            new["mode_main"] = val
-            # FIXED: Remove await
+            new["mode_main"] = val - 1  # CRITICAL FIX: Status is offset by -1
             self.coordinator.async_set_updated_data(new)
             await self.coordinator.async_request_refresh()
+            
+            # Log the value read back after refresh
+            await asyncio.sleep(0.5)  # Small delay to allow device to update
+            new_status = self.coordinator.data.get("mode_main")
+            new_preset = PRESET_STATUS_MAP.get(new_status) if new_status is not None else None
+            
+            _LOGGER.info(
+                "  After refresh:\n"
+                "    Status register value (1160): %s\n"
+                "    Preset name: %s\n"
+                "  Expected preset: %s\n"
+                "  MATCH: %s\n"
+                "=================================",
+                new_status,
+                new_preset,
+                preset_mode,
+                "YES" if new_preset == preset_mode else "NO - MISMATCH!"
+            )
+        else:
+            _LOGGER.error("  Write to register 1161 FAILED")
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """

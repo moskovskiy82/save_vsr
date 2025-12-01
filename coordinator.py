@@ -305,7 +305,15 @@ class VSRCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ) = results + [None] * (len(descriptors) - len(results))  # Pad if fewer
 
             # decode fast stuff
-            data["mode_main"] = mode_main_in[0] if mode_main_in else None
+            mode_main_value = mode_main_in[0] if mode_main_in else None
+            data["mode_main"] = mode_main_value
+            
+            # Log mode_main reads for debugging preset issues
+            if mode_main_value is not None:
+                _LOGGER.debug(
+                    "Read REG_MODE_MAIN_STATUS_IN (1160): value=%s",
+                    mode_main_value
+                )
             data["mode_speed"] = mode_speed[0] if mode_speed else None
             data["target_temp"] = round(to_signed16(target_temp[0]) * 0.1, 1) if target_temp else 0
             data["temp_outdoor"] = round(to_signed16(t_oat[0]) * 0.1, 1) if t_oat else 0

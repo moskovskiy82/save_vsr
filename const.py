@@ -113,14 +113,37 @@ ALARM_VALUE_TO_STATE = {v: k for k, v in ALARM_STATE_TO_VALUE.items()}
 FAN_SPEED_MAP = {2: "low", 3: "medium", 4: "high"}
 FAN_SPEED_TO_VALUE = {v: k for k, v in FAN_SPEED_MAP.items()}
 
-# Main mode / Presets (per your earlier mapping)
-PRESET_MAP = {
+# Main mode / Presets
+# CRITICAL: Status values (read from 1160) are offset by -1 from Command values (write to 1161)
+# Based on working example: command value N results in status value N-1
+
+# Command values (what to WRITE to REG_MODE_MAIN_CMD register 1161)
+PRESET_COMMAND_MAP = {
+    "auto": 1,
+    "manual": 2,
+    "crowded": 3,
+    "refresh": 4,
+    "fireplace": 5,
+    "away": 6,
+    "holiday": 7,
+    "kitchen": 8,          # present on some units
+    "vacuum_cleaner": 9    # present on some units
+}
+
+# Status values (what to READ from REG_MODE_MAIN_STATUS_IN register 1160)
+# These are offset by -1 from command values
+PRESET_STATUS_MAP = {
+    0: "auto",
+    1: "manual",
     2: "crowded",
     3: "refresh",
     4: "fireplace",
     5: "away",
     6: "holiday",
-    7: "kitchen",          # present on some units; we expose but don't set duration
-    8: "vacuum_cleaner"    # present on some units; ditto
+    7: "kitchen",
+    8: "vacuum_cleaner"
 }
-PRESET_TO_VALUE = {v: k for k, v in PRESET_MAP.items()}
+
+# Legacy compatibility - kept for backward compatibility but should use specific maps
+PRESET_MAP = PRESET_STATUS_MAP  # For reading
+PRESET_TO_VALUE = PRESET_COMMAND_MAP  # For writing
