@@ -50,6 +50,14 @@
           }
         }
       }
+    },
+    "sensor": {
+      "fans_energy": {
+        "name": "Fans Energy"
+      },
+      "heater_energy": {
+        "name": "Heater Energy"
+      }
     }
   }
 }

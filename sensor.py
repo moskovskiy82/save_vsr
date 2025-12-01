@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -9,10 +10,12 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorDeviceClass,
     SensorStateClass,
+    RestoreSensor,
 )
 from homeassistant.const import (
     UnitOfTemperature,
     UnitOfPower,
+    UnitOfEnergy,
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
@@ -21,6 +24,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -171,6 +175,23 @@ SENSORS: tuple[VSRSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         coordinator_key="total_power",
     ),
+    # Energy Sensors (for Energy Dashboard)
+    VSRSensorDescription(
+        key="fans_energy",
+        name="Fans Energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        coordinator_key="fans_energy",
+    ),
+    VSRSensorDescription(
+        key="heater_energy",
+        name="Heater Energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        coordinator_key="heater_energy",
+    ),
 
     # ECO Offset
     VSRSensorDescription(
@@ -275,14 +296,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     entities: list[SensorEntity] = []
 
+    # Create power sensors first (needed by energy sensors)
+    power_sensors: dict[str, VSRSensor] = {}
+    
     for desc in SENSORS:
-        entities.append(VSRSensor(coordinator, desc, device_info))
+        sensor = VSRSensor(coordinator, desc, device_info)
+        entities.append(sensor)
+        # Store power sensors for energy sensor references
+        if desc.key in ("supply_fan_power", "extract_fan_power", "heater_power"):
+            power_sensors[desc.key] = sensor
 
     for desc in ALARM_SENSORS:
         entities.append(VSRAlarmSensor(coordinator, desc, device_info))
 
     for desc in COUNTDOWN_SENSORS:
         entities.append(VSRCountdownSensor(coordinator, desc, device_info))
+
+    # Create energy sensors (fans + heater)
+    entities.append(VSREnergySensor(
+        coordinator=coordinator,
+        device_info=device_info,
+        key="fans_energy",
+        name="Fans Energy",
+        power_sensors=[power_sensors["supply_fan_power"], power_sensors["extract_fan_power"]],
+    ))
+    
+    entities.append(VSREnergySensor(
+        coordinator=coordinator,
+        device_info=device_info,
+        key="heater_energy",
+        name="Heater Energy",
+        power_sensors=[power_sensors["heater_power"]],
+    ))
 
     async_add_entities(entities)
 
@@ -370,3 +415,83 @@ class VSRCountdownSensor(VSRBaseSensor):
         if hours > 0:
             return f"{hours} h"
         return f"{minutes} min"
+
+
+class VSREnergySensor(CoordinatorEntity[VSRCoordinator], RestoreSensor):
+    """Energy sensor that integrates power over time for Energy Dashboard."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self,
+        coordinator: VSRCoordinator,
+        device_info: dict[str, Any],
+        key: str,
+        name: str,
+        power_sensors: list[VSRSensor],
+    ) -> None:
+        """Initialize the energy sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.config_entry.entry_id}_{key}"
+        self._attr_name = name
+        self._attr_device_info = device_info
+        self._power_sensors = power_sensors
+        self._last_update: datetime | None = None
+        self._attr_native_value: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which provides long-term statistics."""
+        await super().async_added_to_hass()
+
+        # Restore last energy value from database
+        last_sensor_data = await self.async_get_last_sensor_data()
+        if last_sensor_data:
+            self._attr_native_value = last_sensor_data.native_value
+
+        # Restore last update timestamp
+        if (
+            (last_state := await self.async_get_last_state())
+            and last_state.attributes.get("last_update") is not None
+        ):
+            self._last_update = dt_util.parse_datetime(last_state.attributes["last_update"])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes."""
+        return {
+            "last_update": self._last_update.isoformat() if self._last_update else None,
+        }
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        now = dt_util.utcnow()
+
+        # Calculate total power from all power sensors
+        total_power_w = 0.0
+        for power_sensor in self._power_sensors:
+            power_value = power_sensor.native_value
+            if power_value is not None:
+                total_power_w += float(power_value)
+
+        # Initialize on first update
+        if self._last_update is None:
+            self._last_update = now
+            self.async_write_ha_state()
+            return
+
+        # Calculate energy increment: E = P × t
+        # Power in Watts, time in hours, result in kWh
+        time_delta = now - self._last_update
+        hours = time_delta.total_seconds() / 3600
+        energy_increment_kwh = (total_power_w / 1000) * hours
+
+        # Add to accumulated energy
+        current_value = self._attr_native_value or 0.0
+        self._attr_native_value = round(current_value + energy_increment_kwh, 4)
+
+        # Update timestamp
+        self._last_update = now
+        self.async_write_ha_state()
