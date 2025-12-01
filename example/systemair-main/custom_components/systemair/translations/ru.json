@@ -1,0 +1,422 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Подключение к устройству Systemair",
+                "description": "Выберите тип подключения для вашей вентиляционной установки Systemair.",
+                "data": {
+                    "api_type": "Тип подключения"
+                }
+            },
+            "modbus_tcp": {
+                "title": "Настройка Modbus TCP",
+                "description": "Введите сетевые параметры для подключения к модулю Systemair IAM. Устройство должно быть доступно по Modbus TCP.",
+                "data": {
+                    "host": "IP-адрес",
+                    "port": "Порт",
+                    "slave_id": "Slave ID",
+                    "model": "Модель устройства"
+                }
+            },
+            "modbus_serial": {
+                "title": "Настройка Modbus Serial (RS485)",
+                "description": "Введите параметры последовательного порта для USB-RS485 конвертера, подключенного к устройству Systemair.",
+                "data": {
+                    "port": "Последовательный порт",
+                    "baudrate": "Скорость передачи",
+                    "bytesize": "Биты данных",
+                    "parity": "Четность",
+                    "stopbits": "Стоп-биты",
+                    "slave_id": "Slave ID",
+                    "model": "Модель устройства"
+                }
+            },
+            "modbus_webapi": {
+                "title": "Настройка Modbus WebAPI",
+                "description": "Введите IP-адрес модуля Systemair SAVECONNECT 2.0. Информация об устройстве будет получена автоматически.",
+                "data": {
+                    "ip_address": "IP-адрес",
+                    "model": "Модель устройства (необязательно)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Не удалось подключиться к устройству. Проверьте параметры подключения и убедитесь, что устройство в сети.",
+            "unknown": "Произошла неизвестная ошибка.",
+            "already_configured": "Это устройство уже настроено."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Настройки Systemair",
+                "data": {
+                    "model": "Модель устройства",
+                    "web_api_max_registers": "Макс. регистров на запрос Web API"
+                },
+                "data_description": {
+                    "web_api_max_registers": "Максимальное количество регистров, читаемых за один запрос Web API. Диапазон: 30-125."
+                }
+            }
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "heat_exchange_active": {
+                "name": "Теплообмен активен"
+            },
+            "heater_active": {
+                "name": "Нагреватель активен"
+            },
+            "heat_recovery_active": {
+                "name": "Рекуперация тепла активна"
+            },
+            "cool_recovery_active": {
+                "name": "Рекуперация холода активна"
+            },
+            "free_cooling_active": {
+                "name": "Фрикулинг активен"
+            },
+            "defrosting_active": {
+                "name": "Разморозка активна"
+            },
+            "moisture_transfer_active": {
+                "name": "Перенос влаги активен"
+            },
+            "secondary_air_active": {
+                "name": "Вторичный воздух активен"
+            },
+            "vacuum_cleaner_active": {
+                "name": "Пылесос активен"
+            },
+            "cooker_hood_active": {
+                "name": "Вытяжка активна"
+            },
+            "heating_active": {
+                "name": "Нагрев активен"
+            },
+            "heater_cool_down_active": {
+                "name": "Задержка нагревателя"
+            },
+            "heater_digital_output": {
+                "name": "Цифровой выход нагревателя"
+            },
+            "emergency_thermostat": {
+                "name": "Аварийный термостат"
+            },
+            "heating_circ_pump": {
+                "name": "Циркуляционный насос отопления"
+            },
+            "cooling_circ_pump": {
+                "name": "Циркуляционный насос охлаждения"
+            },
+            "changeover_circ_pump": {
+                "name": "Переключаемый циркуляционный насос"
+            },
+            "extra_controller_circ_pump": {
+                "name": "Циркуляционный насос доп. контроллера"
+            },
+            "changeover_feedback": {
+                "name": "Обратная связь переключения"
+            }
+        },
+        "climate": {
+            "saveconnect": {
+                "name": "Климат",
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "manual": "Ручной",
+                            "crowded": "Многолюдно",
+                            "refresh": "Проветривание",
+                            "fireplace": "Камин",
+                            "away": "Отсутствие",
+                            "holiday": "Отпуск",
+                            "cooker_hood": "Вытяжка",
+                            "vacuum_cleaner": "Пылесос",
+                            "cdi1": "CDI1",
+                            "cdi2": "CDI2",
+                            "cdi3": "CDI3",
+                            "pressure_guard": "Защита давления"
+                        }
+                    }
+                }
+            }
+        },
+        "number": {
+            "time_delay_holiday": {
+                "name": "Отпуск: Период"
+            },
+            "time_delay_away": {
+                "name": "Отсутствие: Период"
+            },
+            "time_delay_fireplace": {
+                "name": "Камин: Период"
+            },
+            "time_delay_refresh": {
+                "name": "Проветривание: Период"
+            },
+            "time_delay_crowded": {
+                "name": "Многолюдно: Период"
+            },
+            "filter_period": {
+                "name": "Период замены фильтра"
+            },
+            "eco_mode_temperature_offset": {
+                "name": "Смещение температуры в Эко-режиме"
+            },
+            "free_cooling_outdoor_low_limit": {
+                "name": "Свободное охлаждение: Нижний предел наружной температуры"
+            },
+            "free_cooling_outdoor_high_limit": {
+                "name": "Свободное охлаждение: Верхний предел наружной температуры"
+            },
+            "free_cooling_room_cancel_temp": {
+                "name": "Свободное охлаждение: Температура отмены"
+            },
+            "free_cooling_start_time_hours": {
+                "name": "Свободное охлаждение: Час начала"
+            },
+            "free_cooling_start_time_minutes": {
+                "name": "Свободное охлаждение: Минуты начала"
+            },
+            "free_cooling_end_time_hours": {
+                "name": "Свободное охлаждение: Час окончания"
+            },
+            "free_cooling_end_time_minutes": {
+                "name": "Свободное охлаждение: Минуты окончания"
+            },
+            "heating_circ_pump_start_temp": {
+                "name": "Циркуляционный насос отопления: Температура включения"
+            },
+            "heating_circ_pump_stop_delay": {
+                "name": "Циркуляционный насос отопления: Задержка выключения"
+            },
+            "cooling_circ_pump_stop_delay": {
+                "name": "Циркуляционный насос охлаждения: Задержка выключения"
+            },
+            "changeover_circ_pump_start_temp": {
+                "name": "Переключаемый циркуляционный насос: Температура включения"
+            },
+            "changeover_circ_pump_stop_delay": {
+                "name": "Переключаемый циркуляционный насос: Задержка выключения"
+            },
+            "extra_controller_circ_pump_start_temp": {
+                "name": "Циркуляционный насос доп. контроллера: Температура включения"
+            },
+            "extra_controller_circ_pump_stop_delay": {
+                "name": "Циркуляционный насос доп. контроллера: Задержка выключения"
+            }
+        },
+        "sensor": {
+            "outside_air_temperature": {
+                "name": "Температура наружного воздуха"
+            },
+            "extract_air_temperature": {
+                "name": "Температура вытяжного воздуха"
+            },
+            "supply_air_temperature": {
+                "name": "Температура приточного воздуха"
+            },
+            "overheat_temperature": {
+                "name": "Датчик перегрева"
+            },
+            "extract_air_relative_humidity": {
+                "name": "Относительная влажность вытяжного воздуха"
+            },
+            "meter_saf_rpm": {
+                "name": "Обороты вентилятора приточного воздуха"
+            },
+            "meter_saf_reg_speed": {
+                "name": "Скорость вентилятора приточного воздуха"
+            },
+            "meter_eaf_rpm": {
+                "name": "Обороты вентилятора вытяжного воздуха"
+            },
+            "meter_eaf_reg_speed": {
+                "name": "Скорость вентилятора вытяжного воздуха"
+            },
+            "heater_output_value": {
+                "name": "Мощность нагревателя"
+            },
+            "heating_demand": {
+                "name": "Требуемая мощность нагрева"
+            },
+            "heater_analog_output": {
+                "name": "Аналоговый выход нагревателя"
+            },
+            "changeover_analog_output": {
+                "name": "Аналоговый выход переключаемого насоса"
+            },
+            "heating_circ_pump_counter": {
+                "name": "Таймер циркуляционного насоса отопления"
+            },
+            "cooling_circ_pump_counter": {
+                "name": "Таймер циркуляционного насоса охлаждения"
+            },
+            "changeover_circ_pump_counter": {
+                "name": "Таймер переключаемого циркуляционного насоса"
+            },
+            "extra_controller_circ_pump_counter": {
+                "name": "Таймер циркуляционного насоса доп. контроллера"
+            },
+            "filter_remaining_time": {
+                "name": "Оставшееся время работы фильтра"
+            },
+            "iaq_level": {
+                "name": "Качество воздуха в помещении"
+            },
+            "demand_active_controller": {
+                "name": "Активный контроллер"
+            },
+            "auto_mode_source": {
+                "name": "Источник автоматического режима",
+                "state": {
+                    "external_control": "Внешнее управление",
+                    "demand_control": "Управление по потребности",
+                    "week_schedule": "Недельное расписание",
+                    "configuration_fault": "Ошибка конфигурации"
+                }
+            },
+            "defrosting_state": {
+                "name": "Состояние разморозки",
+                "state": {
+                    "normal": "Нормально",
+                    "bypass": "Байпас",
+                    "stop": "Стоп",
+                    "secondary_air": "Вторичный воздух",
+                    "error": "Ошибка"
+                }
+            },
+            "supply_fan_power": {
+                "name": "Мощность приточного вентилятора"
+            },
+            "extract_fan_power": {
+                "name": "Мощность вытяжного вентилятора"
+            },
+            "total_power": {
+                "name": "Общее энергопотребление"
+            },
+            "supply_fan_energy": {
+                "name": "Энергопотребление приточного вентилятора"
+            },
+            "extract_fan_energy": {
+                "name": "Энергопотребление вытяжного вентилятора"
+            },
+            "total_energy": {
+                "name": "Общее потребление энергии"
+            },
+            "alarm_history": {
+                "name": "История аварий"
+            },
+            "alarm_reg_alarm_frost_prot_alarm": {
+                "name": "Авария: Защита от замерзания"
+            },
+            "alarm_reg_alarm_defrosting_alarm": {
+                "name": "Авария: Разморозка"
+            },
+            "alarm_reg_alarm_saf_rpm_alarm": {
+                "name": "Авария: Обороты приточного вентилятора"
+            },
+            "alarm_reg_alarm_eaf_rpm_alarm": {
+                "name": "Авария: Обороты вытяжного вентилятора"
+            },
+            "alarm_reg_alarm_sat_alarm": {
+                "name": "Авария: Температура приточного воздуха"
+            },
+            "alarm_reg_alarm_eat_alarm": {
+                "name": "Авария: Температура вытяжного воздуха"
+            },
+            "alarm_reg_alarm_rgs_alarm": {
+                "name": "Авария: Датчик вращения (RGS)"
+            },
+            "alarm_reg_alarm_filter_alarm": {
+                "name": "Авария: Фильтр"
+            },
+            "alarm_reg_alarm_co2_alarm": {
+                "name": "Авария: Датчик CO2"
+            },
+            "alarm_reg_alarm_low_sat_alarm": {
+                "name": "Авария: Низкая температура приточного воздуха"
+            },
+            "alarm_reg_alarm_overheat_temperature_alarm": {
+                "name": "Авария: Перегрев"
+            },
+            "alarm_reg_alarm_fire_alarm_alarm": {
+                "name": "Авария: Пожарная тревога"
+            },
+            "alarm_reg_alarm_filter_warning_alarm": {
+                "name": "Предупреждение: Фильтр"
+            },
+            "alarm_reg_alarm_type_a": {
+                "name": "Авария: Тип A"
+            },
+            "alarm_reg_alarm_type_b": {
+                "name": "Авария: Тип B"
+            },
+            "alarm_reg_alarm_type_c": {
+                "name": "Авария: Тип C"
+            }
+        },
+        "switch": {
+            "eco_mode": {
+                "name": "Эко-режим"
+            },
+            "free_cooling": {
+                "name": "Свободное охлаждение"
+            },
+            "manual_fan_stop_allowed": {
+                "name": "Разрешить ручную остановку вентилятора"
+            }
+        },
+        "select": {
+            "temperature_control_mode": {
+                "name": "Режим контроля температуры",
+                "state": {
+                    "supply_air": "Приточный воздух",
+                    "room_air": "Комнатный воздух",
+                    "extract_air": "Вытяжной воздух"
+                }
+            },
+            "fan_regulation_unit": {
+                "name": "Единица регулирования вентилятора",
+                "state": {
+                    "manual_percent": "Ручной, %",
+                    "manual_rpm": "Ручной, об/мин",
+                    "pressure": "Давление",
+                    "flow": "Поток",
+                    "external": "Внешний"
+                }
+            },
+            "defrosting_mode": {
+                "name": "Режим разморозки",
+                "state": {
+                    "soft": "Мягкий",
+                    "normal": "Обычный",
+                    "hard": "Интенсивный"
+                }
+            },
+            "free_cooling_supply_fan_level": {
+                "name": "Свободное охлаждение: Уровень приточного вентилятора",
+                "state": {
+                    "normal": "Обычный",
+                    "high": "Высокий",
+                    "maximum": "Максимальный"
+                }
+            },
+            "free_cooling_extract_fan_level": {
+                "name": "Свободное охлаждение: Уровень вытяжного вентилятора",
+                "state": {
+                    "normal": "Обычный",
+                    "high": "Высокий",
+                    "maximum": "Максимальный"
+                }
+            }
+        },
+        "button": {
+            "reset_filter_timer": {
+                "name": "Сбросить таймер фильтра"
+            }
+        }
+    }
+}

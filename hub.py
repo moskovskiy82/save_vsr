@@ -66,6 +66,7 @@ class VSRHub:
     async def async_connect(self) -> None:
         await self.async_close()  # Ensure clean start
         if self.transport == TRANSPORT_SERIAL:
+            # CHANGED: Removed method="rtu" and strict=False (not supported in 3.11.2)
             self._client = AsyncModbusSerialClient(
                 port=self.port,
                 baudrate=self.baudrate,
@@ -73,7 +74,6 @@ class VSRHub:
                 parity=self.parity,
                 stopbits=self.stopbits,
                 timeout=IO_TIMEOUT_S,
-                strict=False,
             )
         else:
             self._client = AsyncModbusTcpClient(
@@ -110,8 +110,9 @@ class VSRHub:
             last_exc = None
             for attempt in range(IO_ATTEMPTS):
                 try:
+                    # CHANGED: address positional, count= and device_id= as keywords
                     rr = await asyncio.wait_for(
-                        self._client.read_input_registers(address, count, unit=self.slave_id),
+                        self._client.read_input_registers(address, count=count, device_id=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if rr.isError():
@@ -131,8 +132,9 @@ class VSRHub:
             last_exc = None
             for attempt in range(IO_ATTEMPTS):
                 try:
+                    # CHANGED: address positional, count= and device_id= as keywords
                     rr = await asyncio.wait_for(
-                        self._client.read_holding_registers(address, count, unit=self.slave_id),
+                        self._client.read_holding_registers(address, count=count, device_id=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if rr.isError():
@@ -152,8 +154,9 @@ class VSRHub:
             last_exc = None
             for attempt in range(IO_ATTEMPTS):
                 try:
+                    # CHANGED: address and value positional, device_id= as keyword
                     wr = await asyncio.wait_for(
-                        self._client.write_register(address, value, unit=self.slave_id),
+                        self._client.write_register(address, value, device_id=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if wr.isError():
@@ -173,8 +176,9 @@ class VSRHub:
             last_exc = None
             for attempt in range(IO_ATTEMPTS):
                 try:
+                    # CHANGED: address and value positional, device_id= as keyword
                     wr = await asyncio.wait_for(
-                        self._client.write_coil(address, value, unit=self.slave_id),
+                        self._client.write_coil(address, value, device_id=self.slave_id),
                         timeout=IO_TIMEOUT_S,
                     )
                     if wr.isError():

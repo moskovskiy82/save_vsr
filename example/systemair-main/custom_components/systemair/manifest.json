@@ -1,0 +1,19 @@
+{
+  "domain": "systemair",
+  "name": "Systemair",
+  "codeowners": [
+    "@AN3Orik",
+    "@bstenborg",
+    "@tesharp"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/AN3Orik/systemair",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/AN3Orik/systemair/issues",
+  "requirements": [
+    "pymodbus==3.11.2",
+    "aiohttp",
+    "async-timeout"
+  ],
+  "version": "1.0.17"
+}

@@ -45,3 +45,5 @@ secrets.yaml
 *.bak
 *.tmp
 
+
+.clinerules

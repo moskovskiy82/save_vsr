@@ -1,0 +1,422 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Connect to Systemair Unit",
+                "description": "Select the connection type for your Systemair ventilation unit.",
+                "data": {
+                    "api_type": "Connection Type"
+                }
+            },
+            "modbus_tcp": {
+                "title": "Modbus TCP Configuration",
+                "description": "Enter the IP address of your Systemair IAM module. The device must be accessible via Modbus TCP.",
+                "data": {
+                    "host": "IP Address",
+                    "port": "Port",
+                    "slave_id": "Slave ID",
+                    "model": "Ventilation Unit Model"
+                }
+            },
+            "modbus_serial": {
+                "title": "Modbus Serial (RS485) Configuration",
+                "description": "Enter the serial port details for your USB-RS485 converter connected to the Systemair unit.",
+                "data": {
+                    "port": "Serial Port",
+                    "baudrate": "Baud Rate",
+                    "bytesize": "Data Bits",
+                    "parity": "Parity",
+                    "stopbits": "Stop Bits",
+                    "slave_id": "Slave ID",
+                    "model": "Ventilation Unit Model"
+                }
+            },
+            "modbus_webapi": {
+                "title": "Modbus WebAPI Configuration",
+                "description": "Enter the IP address of your Systemair SAVECONNECT 2.0 module. The device info will be retrieved automatically.",
+                "data": {
+                    "ip_address": "IP Address",
+                    "model": "Ventilation Unit Model (optional)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Unable to connect to the device. Please check the connection details and ensure the device is online.",
+            "unknown": "An unknown error occurred.",
+            "already_configured": "This device is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Systemair Settings",
+                "data": {
+                    "model": "Ventilation Unit Model",
+                    "web_api_max_registers": "Max registers per Web API request"
+                },
+                "data_description": {
+                    "web_api_max_registers": "Maximum number of registers to read in a single Web API request. Range: 30-125."
+                }
+            }
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "heat_exchange_active": {
+                "name": "Heat Exchange active"
+            },
+            "heater_active": {
+                "name": "Heater active"
+            },
+            "heat_recovery_active": {
+                "name": "Heat Recovery Active"
+            },
+            "cool_recovery_active": {
+                "name": "Cool Recovery Active"
+            },
+            "free_cooling_active": {
+                "name": "Free Cooling Active"
+            },
+            "defrosting_active": {
+                "name": "Defrosting Active"
+            },
+            "moisture_transfer_active": {
+                "name": "Moisture Transfer Active"
+            },
+            "secondary_air_active": {
+                "name": "Secondary Air Active"
+            },
+            "vacuum_cleaner_active": {
+                "name": "Vacuum Cleaner Active"
+            },
+            "cooker_hood_active": {
+                "name": "Cooker Hood Active"
+            },
+            "heating_active": {
+                "name": "Heating Active"
+            },
+            "heater_cool_down_active": {
+                "name": "Heater Cool Down Active"
+            },
+            "heater_digital_output": {
+                "name": "Heater Digital Output"
+            },
+            "emergency_thermostat": {
+                "name": "Emergency Thermostat"
+            },
+            "heating_circ_pump": {
+                "name": "Heating Circulation Pump"
+            },
+            "cooling_circ_pump": {
+                "name": "Cooling Circulation Pump"
+            },
+            "changeover_circ_pump": {
+                "name": "Changeover Circulation Pump"
+            },
+            "extra_controller_circ_pump": {
+                "name": "Extra Controller Circulation Pump"
+            },
+            "changeover_feedback": {
+                "name": "Changeover Feedback"
+            }
+        },
+        "climate": {
+            "saveconnect": {
+                "name": "Climate",
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "manual": "Manual",
+                            "crowded": "Crowded",
+                            "refresh": "Refresh",
+                            "fireplace": "Fireplace",
+                            "away": "Away",
+                            "holiday": "Holiday",
+                            "cooker_hood": "Cooker Hood",
+                            "vacuum_cleaner": "Vacuum Cleaner",
+                            "cdi1": "CDI1",
+                            "cdi2": "CDI2",
+                            "cdi3": "CDI3",
+                            "pressure_guard": "Pressure Guard"
+                        }
+                    }
+                }
+            }
+        },
+        "number": {
+            "time_delay_holiday": {
+                "name": "Holiday: Time delay"
+            },
+            "time_delay_away": {
+                "name": "Away: Time delay"
+            },
+            "time_delay_fireplace": {
+                "name": "Fireplace: Time delay"
+            },
+            "time_delay_refresh": {
+                "name": "Refresh: Time delay"
+            },
+            "time_delay_crowded": {
+                "name": "Crowded: Time delay"
+            },
+            "filter_period": {
+                "name": "Filter Replacement Period"
+            },
+            "eco_mode_temperature_offset": {
+                "name": "Eco Mode Temperature Offset"
+            },
+            "free_cooling_outdoor_low_limit": {
+                "name": "Free Cooling: Outdoor Low Limit"
+            },
+            "free_cooling_outdoor_high_limit": {
+                "name": "Free Cooling: Outdoor High Limit"
+            },
+            "free_cooling_room_cancel_temp": {
+                "name": "Free Cooling: Room Cancel Temperature"
+            },
+            "free_cooling_start_time_hours": {
+                "name": "Free Cooling: Start Time Hours"
+            },
+            "free_cooling_start_time_minutes": {
+                "name": "Free Cooling: Start Time Minutes"
+            },
+            "free_cooling_end_time_hours": {
+                "name": "Free Cooling: End Time Hours"
+            },
+            "free_cooling_end_time_minutes": {
+                "name": "Free Cooling: End Time Minutes"
+            },
+            "heating_circ_pump_start_temp": {
+                "name": "Heating Circulation Pump: Start Temperature"
+            },
+            "heating_circ_pump_stop_delay": {
+                "name": "Heating Circulation Pump: Stop Delay"
+            },
+            "cooling_circ_pump_stop_delay": {
+                "name": "Cooling Circulation Pump: Stop Delay"
+            },
+            "changeover_circ_pump_start_temp": {
+                "name": "Changeover Circulation Pump: Start Temperature"
+            },
+            "changeover_circ_pump_stop_delay": {
+                "name": "Changeover Circulation Pump: Stop Delay"
+            },
+            "extra_controller_circ_pump_start_temp": {
+                "name": "Extra Controller Circulation Pump: Start Temperature"
+            },
+            "extra_controller_circ_pump_stop_delay": {
+                "name": "Extra Controller Circulation Pump: Stop Delay"
+            }
+        },
+        "sensor": {
+            "outside_air_temperature": {
+                "name": "Outside air temperature"
+            },
+            "extract_air_temperature": {
+                "name": "Extract air temperature"
+            },
+            "supply_air_temperature": {
+                "name": "Supply air temperature"
+            },
+            "overheat_temperature": {
+                "name": "Overheat Temperature sensor"
+            },
+            "extract_air_relative_humidity": {
+                "name": "Extract air relative humidity"
+            },
+            "meter_saf_rpm": {
+                "name": "Supply air fan RPM"
+            },
+            "meter_saf_reg_speed": {
+                "name": "Supply air fan speed"
+            },
+            "meter_eaf_rpm": {
+                "name": "Extract air fan RPM"
+            },
+            "meter_eaf_reg_speed": {
+                "name": "Extract air fan speed"
+            },
+            "heater_output_value": {
+                "name": "Heater output value"
+            },
+            "heating_demand": {
+                "name": "Heating Demand"
+            },
+            "heater_analog_output": {
+                "name": "Heater Analog Output"
+            },
+            "changeover_analog_output": {
+                "name": "Changeover Analog Output"
+            },
+            "heating_circ_pump_counter": {
+                "name": "Heating Circulation Pump Counter"
+            },
+            "cooling_circ_pump_counter": {
+                "name": "Cooling Circulation Pump Counter"
+            },
+            "changeover_circ_pump_counter": {
+                "name": "Changeover Circulation Pump Counter"
+            },
+            "extra_controller_circ_pump_counter": {
+                "name": "Extra Controller Circulation Pump Counter"
+            },
+            "filter_remaining_time": {
+                "name": "Filter remaining time"
+            },
+            "iaq_level": {
+                "name": "Indoor Air Quality"
+            },
+            "demand_active_controller": {
+                "name": "Demand Active Controller"
+            },
+            "auto_mode_source": {
+                "name": "Auto Mode Source",
+                "state": {
+                    "external_control": "External control",
+                    "demand_control": "Demand control",
+                    "week_schedule": "Week schedule",
+                    "configuration_fault": "Configuration fault"
+                }
+            },
+            "defrosting_state": {
+                "name": "Defrosting State",
+                "state": {
+                    "normal": "Normal",
+                    "bypass": "Bypass",
+                    "stop": "Stop",
+                    "secondary_air": "Secondary air",
+                    "error": "Error"
+                }
+            },
+            "supply_fan_power": {
+                "name": "Supply Fan Power"
+            },
+            "extract_fan_power": {
+                "name": "Extract Fan Power"
+            },
+            "total_power": {
+                "name": "Total Power Consumption"
+            },
+            "supply_fan_energy": {
+                "name": "Supply Fan Energy"
+            },
+            "extract_fan_energy": {
+                "name": "Extract Fan Energy"
+            },
+            "total_energy": {
+                "name": "Total Energy Consumption"
+            },
+            "alarm_history": {
+                "name": "Alarm History"
+            },
+            "alarm_reg_alarm_frost_prot_alarm": {
+                "name": "Frost Protection Alarm"
+            },
+            "alarm_reg_alarm_defrosting_alarm": {
+                "name": "Defrosting Alarm"
+            },
+            "alarm_reg_alarm_saf_rpm_alarm": {
+                "name": "Supply Air Fan RPM Alarm"
+            },
+            "alarm_reg_alarm_eaf_rpm_alarm": {
+                "name": "Extract Air Fan RPM Alarm"
+            },
+            "alarm_reg_alarm_sat_alarm": {
+                "name": "Supply Air Temperature Alarm"
+            },
+            "alarm_reg_alarm_eat_alarm": {
+                "name": "Extract Air Temperature Alarm"
+            },
+            "alarm_reg_alarm_rgs_alarm": {
+                "name": "Rotation Guard (RGS) Alarm"
+            },
+            "alarm_reg_alarm_filter_alarm": {
+                "name": "Filter Alarm"
+            },
+            "alarm_reg_alarm_co2_alarm": {
+                "name": "CO2 Alarm"
+            },
+            "alarm_reg_alarm_low_sat_alarm": {
+                "name": "Low Supply Air Temperature Alarm"
+            },
+            "alarm_reg_alarm_overheat_temperature_alarm": {
+                "name": "Overheat Temperature Alarm"
+            },
+            "alarm_reg_alarm_fire_alarm_alarm": {
+                "name": "Fire Alarm"
+            },
+            "alarm_reg_alarm_filter_warning_alarm": {
+                "name": "Filter Warning"
+            },
+            "alarm_reg_alarm_type_a": {
+                "name": "Alarm Type A Active"
+            },
+            "alarm_reg_alarm_type_b": {
+                "name": "Alarm Type B Active"
+            },
+            "alarm_reg_alarm_type_c": {
+                "name": "Alarm Type C Active"
+            }
+        },
+        "switch": {
+            "eco_mode": {
+                "name": "Eco mode"
+            },
+            "free_cooling": {
+                "name": "Free Cooling"
+            },
+            "manual_fan_stop_allowed": {
+                "name": "Allow manual fan stop"
+            }
+        },
+        "select": {
+            "temperature_control_mode": {
+                "name": "Temperature Control Mode",
+                "state": {
+                    "supply_air": "Supply air",
+                    "room_air": "Room air",
+                    "extract_air": "Extract air"
+                }
+            },
+            "fan_regulation_unit": {
+                "name": "Fan Regulation Unit",
+                "state": {
+                    "manual_percent": "Manual, %",
+                    "manual_rpm": "Manual, RPM",
+                    "pressure": "Pressure",
+                    "flow": "Flow",
+                    "external": "External"
+                }
+            },
+            "defrosting_mode": {
+                "name": "Defrosting Mode",
+                "state": {
+                    "soft": "Soft",
+                    "normal": "Normal",
+                    "hard": "Hard"
+                }
+            },
+            "free_cooling_supply_fan_level": {
+                "name": "Free Cooling: Supply Fan Level",
+                "state": {
+                    "normal": "Normal",
+                    "high": "High",
+                    "maximum": "Maximum"
+                }
+            },
+            "free_cooling_extract_fan_level": {
+                "name": "Free Cooling: Extract Fan Level",
+                "state": {
+                    "normal": "Normal",
+                    "high": "High",
+                    "maximum": "Maximum"
+                }
+            }
+        },
+        "button": {
+            "reset_filter_timer": {
+                "name": "Reset Filter Timer"
+            }
+        }
+    }
+}
