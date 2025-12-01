@@ -6,14 +6,15 @@
 |-------|------|--------|----------|
 | 2.4 | Add Integration Logo | ✅ Completed | ⭐⭐ HIGH |
 | 3.1 | Create modbus.py | ✅ Completed | ⭐⭐⭐ CRITICAL |
-| 3.2 | Refactor coordinator.py | ⏳ Pending | ⭐⭐⭐ CRITICAL |
+| 3.2 | Refactor coordinator.py | ✅ Completed | ⭐⭐⭐ CRITICAL |
+| 3.2.2 | Localize preset names | ⏳ Pending | ⭐⭐ HIGH |
 | 4.1 | Energy Dashboard | ⏳ Pending | ⭐⭐ HIGH |
 | 4.2 | Alarm History | ⏳ Pending | ⭐ MEDIUM |
 | 4.3 | Virtual Efficiency | ⏳ Pending | ⭐ MEDIUM |
 | 5.1 | ML Anomaly Detection | ⏳ Future | ⭐ LOW |
 
-**Last Updated:** 2025-12-01 22:24 MSK
-**Current Focus:** Phase 3.1 ✅ COMPLETED - Ready for Phase 3.2
+**Last Updated:** 2025-12-01 22:42 MSK
+**Current Focus:** Phase 3.2 ✅ COMPLETED - Ready for Phase 3.2.2
 
 ---
 
@@ -48,13 +49,15 @@
 
 ---
 
-## ✅ Version 2.3 (CURRENT)
+## ✅ Version 3.2.1 (CURRENT)
 
 **Status:** Stable release
 **Features:**
-- Preset mode fix (command/status offset)
-- All basic sensors working
-- Climate control functional
+- ✅ ModbusParameter system in modbus.py
+- ✅ Refactored coordinator.py with get_modbus_data()
+- ✅ Cleaner code, easier maintenance
+- ✅ All sensors working
+- ✅ Climate control functional
 
 ---
 
@@ -146,6 +149,53 @@ def get_modbus_data(self, param: ModbusParameter) -> float | bool:
 
 **Files:**
 - MODIFY: `coordinator.py`
+
+---
+
+### Phase 3.2.2: Localize Preset Names ⭐⭐
+**Time:** 1 hour | **Version:** 3.2.2
+
+**Problem:**
+Current preset names are in English and not intuitive:
+- `fireplace` - unclear what it does
+- `refresh` - unclear what it does
+- `crowded` - unclear what it does
+
+**Solution:**
+Rename presets to Russian names that clearly describe their purpose:
+- `fireplace` → `камин` (Камин - for fireplace mode, closes damper)
+- `refresh` → `форточка` (Форточка - like opening a window, fresh air boost)
+- `crowded` → `максимум` (Максимум - maximum ventilation for many people)
+
+**Implementation:**
+1. Update `const.py`:
+   - Modify `PRESET_COMMAND_MAP` keys
+   - Modify `PRESET_STATUS_MAP` values
+   - Keep internal values (1-9) unchanged
+
+2. Update `climate.py`:
+   - Update `PRESET_MODES` list
+   - Ensure backward compatibility
+
+3. Update `translations/en.json`:
+   - Add Russian preset names
+   - Keep English as fallback
+
+**Files to modify:**
+- `const.py` - Preset name mappings
+- `climate.py` - Available preset modes
+- `translations/en.json` - UI translations
+
+**Testing:**
+- [ ] Preset names show in Russian in UI
+- [ ] Switching presets works correctly
+- [ ] Device responds to preset changes
+- [ ] No errors in logs
+
+**Benefits:**
+- ✅ Clear, intuitive names
+- ✅ Better UX for Russian users
+- ✅ Easier to understand what each mode does
 
 ---
 
