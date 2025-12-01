@@ -1,0 +1,39 @@
+{
+    "entity": {
+        "climate": {
+            "default": "mdi:air-filter",
+            "state_attributes": {
+                "preset_mode": {
+                    "default": "mdi:tune-variant",
+                    "state": {
+                        "auto": "mdi:auto-mode",
+                        "manual": "mdi:hand-back-right",
+                        "crowded": "mdi:account-multiple",
+                        "refresh": "mdi:fan-plus",
+                        "fireplace": "mdi:fireplace",
+                        "away": "mdi:exit-run",
+                        "holiday": "mdi:bag-suitcase",
+                        "kitchen": "mdi:chef-hat",
+                        "vacuum_cleaner": "mdi:robot-vacuum"
+                    }
+                },
+                "hvac_mode": {
+                    "default": "mdi:hvac",
+                    "state": {
+                        "off": "mdi:hvac-off",
+                        "auto": "mdi:autorenew",
+                        "fan_only": "mdi:fan"
+                    }
+                },
+                "fan_mode": {
+                    "default": "mdi:fan",
+                    "state": {
+                        "low": "mdi:fan-speed-1",
+                        "medium": "mdi:fan-speed-2",
+                        "high": "mdi:fan-speed-3"
+                    }
+                }
+            }
+        }
+    }
+}
