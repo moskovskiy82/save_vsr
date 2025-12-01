@@ -8,13 +8,38 @@
 | 3.1 | Create modbus.py | ✅ Completed | ⭐⭐⭐ CRITICAL |
 | 3.2 | Refactor coordinator.py | ✅ Completed | ⭐⭐⭐ CRITICAL |
 | 3.2.2 | Localize preset names | ⏳ Pending | ⭐⭐ HIGH |
-| 4.1 | Energy Dashboard | ⏳ Pending | ⭐⭐ HIGH |
+| 4.1 | Energy Dashboard | ✅ Completed | ⭐⭐ HIGH |
 | 4.2 | Alarm History | ⏳ Pending | ⭐ MEDIUM |
 | 4.3 | Virtual Efficiency | ⏳ Pending | ⭐ MEDIUM |
 | 5.1 | ML Anomaly Detection | ⏳ Future | ⭐ LOW |
 
-**Last Updated:** 2025-12-01 22:42 MSK
-**Current Focus:** Phase 3.2 ✅ COMPLETED - Ready for Phase 3.2.2
+**Last Updated:** 2025-12-01 23:27 MSK
+**Current Focus:** Phase 4.1 ✅ COMPLETED - Testing Energy Dashboard
+
+## 📊 Missing Features Analysis
+
+Detailed comparison with reference integration (`example/systemair-main/`):
+
+| Domain | Our Integration | Example Integration | Missing | Priority |
+|--------|----------------|---------------------|---------|----------|
+| **Sensors** | ~20 | ~35 | ~15 | ⭐⭐ HIGH |
+| **Climate** | 3 presets | 13 presets | 10 | ⭐⭐ HIGH |
+| **Switches** | 3 | 5 | 2 | ⭐ MEDIUM |
+| **Binary Sensors** | 5 | ~25 | ~20 | ⭐ MEDIUM |
+| **Select** | 1 | 6 | 5 | ⭐ MEDIUM |
+| **Number** | 6 | 24 | 18 | ⭐ LOW |
+| **Button** | 0 | 1 | 1 | ⭐ LOW |
+| **TOTAL** | **~38** | **~109** | **~71** | - |
+
+**Documentation:** See [`missing/`](missing/) directory for detailed breakdown by domain.
+
+**Key Missing Features:**
+- 🌡️ IAQ Level sensor, Humidity sensors (Supply/Extract/Outdoor)
+- 🔄 Additional preset modes (Crowded, Refresh, Away, Holiday, etc.)
+- ⚡ Free Cooling switch and configuration
+- 🔔 Active function binary sensors (Heater, Cooler, Defrost)
+- ⚙️ Temperature Control Mode, Fan Regulation Unit selects
+- 🔢 Filter Period, Free Cooling schedule numbers
 
 ---
 
@@ -232,13 +257,47 @@ MODEL_SPECS = {
 ### Phase 4.2: Alarm History ⭐
 **Time:** 2-3 hours | **Reference:** `example/.../sensor.py` (lines 458-495)
 
-**What:**
-- Parse alarm log registers (15000+)
-- Show history in sensor attributes
-- Map alarm IDs to names
+**What it does:**
+Sensor `sensor.vsr_alarm_history` shows last 10 alarms from device memory with timestamps.
+
+**Current problem:**
+- Existing alarm sensors only show CURRENT state (Active/Inactive)
+- If alarm happened yesterday at 3 AM, you won't know about it
+
+**Solution:**
+- VSR stores last 10 alarms in registers 16001-16080 (10 × 8 registers)
+- Each alarm record contains: ID, Status, Year, Month, Day, Hour, Minute, Second
+- Sensor shows latest alarm as state + full history in attributes
+
+**Example output:**
+```
+State: "Filter"
+Attributes:
+  history:
+    - alarm: "Filter"
+      status: "Active"
+      timestamp: "2024-11-30 15:30:45"
+    - alarm: "Frost protection"
+      status: "Acknowledged"
+      timestamp: "2024-11-28 03:15:20"
+```
+
+**Use cases:**
+- Diagnostics: Why did ventilation stop last night?
+- Prevention: Filter warning appeared 3 times → replace soon
+- Automation: Send notification when specific alarm appears
+- Statistics: Which alarms are most frequent?
+
+**Implementation:**
+1. Add `alarm_log_registers` to `modbus.py` (10 entries × 8 regs)
+2. Add `ALARM_ID_TO_NAME_MAP` (35 alarm types: 0-34)
+3. Create sensor that reads history and parses timestamps
+4. Map alarm IDs to human-readable names
 
 **Files:**
 - MODIFY: `sensor.py`, `modbus.py`
+
+**Priority:** MEDIUM - useful for diagnostics but not critical
 
 ---
 
