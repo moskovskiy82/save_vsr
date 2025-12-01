@@ -1,8 +1,9 @@
 {
   "domain": "save_vsr",
-  "name": "Systemair VSR",
-  "version": "2.3.0",
+  "name": "Systemair SAVE VSR",
+  "version": "2.3.1",
   "documentation": "https://github.com/moskovskiy82/save_vsr",
+  "issue_tracker": "https://github.com/moskovskiy82/save_vsr/issues",
   "requirements": [
     "pymodbus==3.11.2"
   ],
@@ -13,7 +14,5 @@
   "iot_class": "local_polling",
   "loggers": ["pymodbus", "custom_components.save_vsr"],
   "integration_type": "device",
-  "icon": "icon.png",
-  "logo": "logo.png",
   "platforms": ["sensor", "binary_sensor", "climate", "number", "select", "switch"]
 }
