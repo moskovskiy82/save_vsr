@@ -37,15 +37,18 @@ Example integration has additional presets:
   Check: REG_OUTPUT_TRIAC (14381)
 - **COOLING** - When cooler is actively cooling
   Check: REG_OUTPUT_Y3_DIGITAL (14202)
+  #To copy into ours: Pending
 
 ## Additional Properties
 - **Current Humidity** - Display current humidity from RH sensor
   Register: REG_SENSOR_RHS_PDM (12136)
+  #To copy into ours: True
 
 ## Turn On/Off Support
 - **Turn On/Off** - ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
   Control fan speed: 0=OFF, 2=ON (low speed)
   Register: REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF (1131)
+  #To copy into ours: Pending
 
 Note: Our implementation already has good foundation with preset modes and fan control.
 Main additions would be: more preset modes, HVAC mode detection, and turn on/off feature.

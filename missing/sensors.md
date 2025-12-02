@@ -12,7 +12,7 @@
 - **Changeover Analog Output** - Changeover analog output value (%)
   Register: REG_OUTPUT_Y1_Y3_ANALOG (14306)
 
-## Circulation Pump Counters (Diagnostic)
+## Circulation Pump Counters (Diagnostic) #To copy into ours: ⚠️ False for all Circ pump
 - **Heating Circ Pump Counter** - Time counter for heating circulation pump (seconds)
   Register: REG_HEATER_CIRC_PUMP_COUNTER (2124)
 - **Cooling Circ Pump Counter** - Time counter for cooling circulation pump (seconds)
@@ -42,7 +42,7 @@
 - **Alarm History** - Shows most recent alarm with full history in attributes
   Special sensor with alarm log parsing from registers 15701-15890
 
-## Power Sensors (Already Implemented)
+## Power Sensors (Already Implemented) 
 ✓ Supply Fan Power
 ✓ Extract Fan Power  
 ✓ Total Power

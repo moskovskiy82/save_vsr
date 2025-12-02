@@ -1,16 +1,17 @@
 # Missing Number Entities
 
 ## Time Delay Settings
-Our integration has: ECO Offset, Holiday Days, Away Hours, Fireplace Mins, Refresh Mins, Crowded Hours
+Our integration has: ECO Offset, Holiday Days # ⚠️ Let's remove as we removed preset, Away Hours # ⚠️ Let's removed as we removed preset, Fireplace Mins, Refresh Mins, Crowded Hours
 Example integration has the same PLUS additional settings:
 
 - **Filter Period** - Filter replacement interval (months)
   Register: REG_FILTER_PERIOD (7001)
   Range: 3-15 months, Step: 1
+#To copy into ours: ⚠️ False
 
 Note: We already have all the user mode duration settings. Example adds filter period.
 
-## Free Cooling Settings
+## Free Cooling Settings #To copy into ours: ⚠️ False for all free vooling
 Example integration has extensive free cooling configuration (we don't have):
 
 - **Free Cooling Outdoor Low Limit** - Minimum outdoor temp for free cooling (°C)
@@ -41,7 +42,7 @@ Example integration has extensive free cooling configuration (we don't have):
   Register: REG_FREE_COOLING_END_TIME_M (4109)
   Range: 0-59, Step: 1
 
-## Circulation Pump Settings
+## Circulation Pump Settings #To copy into ours: ⚠️ False we don't have a pump
 Example integration has circulation pump configuration (we don't have):
 
 - **Heating Circ Pump Start Temp** - Temperature to start heating pump (°C)
