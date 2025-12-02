@@ -118,31 +118,19 @@ FAN_SPEED_TO_VALUE = {v: k for k, v in FAN_SPEED_MAP.items()}
 # Based on working example: command value N results in status value N-1
 
 # Command values (what to WRITE to REG_MODE_MAIN_CMD register 1161)
-# Localized preset names for better UX
+# Only 3 special presets available for user selection
 PRESET_COMMAND_MAP = {
-    "auto": 1,
-    "manual": 2,
     "максимум": 3,      # crowded -> максимум (maximum ventilation)
     "форточка": 4,      # refresh -> форточка (fresh air boost)
     "камин": 5,         # fireplace -> камин (fireplace mode)
-    "away": 6,
-    "holiday": 7,
-    "kitchen": 8,          # present on some units
-    "vacuum_cleaner": 9    # present on some units
 }
 
 # Status values (what to READ from REG_MODE_MAIN_STATUS_IN register 1160)
 # These are offset by -1 from command values
 PRESET_STATUS_MAP = {
-    0: "auto",
-    1: "manual",
     2: "максимум",      # crowded -> максимум
     3: "форточка",      # refresh -> форточка
     4: "камин",         # fireplace -> камин
-    5: "away",
-    6: "holiday",
-    7: "kitchen",
-    8: "vacuum_cleaner"
 }
 
 # Legacy compatibility - kept for backward compatibility but should use specific maps

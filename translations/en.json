@@ -37,15 +37,9 @@
         "state_attributes": {
           "preset_mode": {
             "state": {
-              "auto": "Auto",
-              "manual": "Manual",
               "максимум": "Maximum",
               "форточка": "Fresh Air",
-              "камин": "Fireplace",
-              "away": "Away",
-              "holiday": "Holiday",
-              "kitchen": "Kitchen",
-              "vacuum_cleaner": "Vacuum Cleaner"
+              "камин": "Fireplace"
             }
           }
         }

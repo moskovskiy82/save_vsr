@@ -1,7 +1,7 @@
 {
   "domain": "save_vsr",
   "name": "Systemair SAVE VSR",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "documentation": "https://github.com/moskovskiy82/save_vsr",
   "issue_tracker": "https://github.com/moskovskiy82/save_vsr/issues",
   "requirements": [
